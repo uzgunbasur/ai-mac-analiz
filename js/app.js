@@ -79,9 +79,9 @@ class AIMatchPulseApp {
     const optScore = document.getElementById('optScore')?.checked;
     const optStandart = document.getElementById('optStandart')?.checked;
 
-    let prompt = `Merhaba! Bugünün (${formattedDate}) oynanacak en önemli futbol maçlarını analiz etmeni ve kesin skor tahminlerini sunmanı istiyorum.\n\n`;
-    prompt += `LÜTFEN ŞU DETAYLARA ODAKLAN:\n`;
-    prompt += `1. Bugünün öne çıkan (UEFA Uluslar Ligi / Avrupa Kupaları / Süper Lig / Popüler Ligler) maçlarını listele.\n`;
+    let prompt = `Merhaba! Bugünün (${formattedDate}) oynanacak en önemli futbol maçlarını analiz etmeni ve net skor tahminlerini sunmanı istiyorum.\n\n`;
+    prompt += `ANALİZ ODAK NOKTALARI:\n`;
+    prompt += `1. Bugünün öne çıkan (UEFA Şampiyonlar Ligi / Avrupa Kupaları / Süper Lig / Premier Lig / Popüler Ligler) maçlarını listele.\n`;
 
     if (optOdds) {
       prompt += `2. Takımların form durumları, hücum/savunma dengesi ve maçın favorisini belirt.\n`;
@@ -94,11 +94,31 @@ class AIMatchPulseApp {
     }
 
     if (optStandart) {
-      prompt += `\nÖNEMLİ FORMAT KURALI:\nTahminlerini otomatik karşılaştırma tabloma aktarabilmem için HER MAÇI ŞU STANDART FORMATTA yaz:\n`;
-      prompt += `Maç: [Ev Sahibi] vs [Deplasman]\nSkor: [X - Y]\nTercih: [MS 1 / X / 2 - 2.5 Üst vb.]\nGüven: [%XX]\nAnaliz: [1-2 cümlelik kısa özet]\n---\n`;
+      prompt += `\n═══════════════════════════════════════════════════════════════\n`;
+      prompt += `⛔ ÇOK KATI ÇIKTI KURALI (OUTPUT FORMAT) - KESİNLİKLE UYULMALIDIR:\n`;
+      prompt += `═══════════════════════════════════════════════════════════════\n`;
+      prompt += `1. Giriş, selamlama, kapanış veya sohbet cümleleri (örn: "İşte bugünün maçları...", "Bol şanslar!") KESİNLİKLE KURMA. Lafı hiç uzatma.\n`;
+      prompt += `2. TÜM YANITINI YALNIZCA TEK BİR MARKDOWN KOD BLOĞU (\`\`\`text ... \`\`\`) İÇİNDE VER. Kod bloğunun dışında tek bir kelime dahi yazma.\n`;
+      prompt += `   (Bu sayede yanıtının sağ üst köşesindeki 'Copy' butonuna basarak tek tıkla kopyalayabileceğim).\n`;
+      prompt += `3. Kod bloğunun içinde HER MAÇI istisnasız aşağıdaki 5 satırlık şablona birebir uyarak yaz ve maçların arasına '---' ayırıcısını koy:\n\n`;
+      prompt += `\`\`\`text\n`;
+      prompt += `Maç: [Ev Sahibi] vs [Deplasman]\n`;
+      prompt += `Skor: [X - Y]\n`;
+      prompt += `Tercih: [MS 1 / X / 2 - 2.5 Üst / KG Var vb.]\n`;
+      prompt += `Güven: [%XX]\n`;
+      prompt += `Analiz: [1-2 cümlelik kısa özet]\n`;
+      prompt += `---\n`;
+      prompt += `Maç: [Ev Sahibi] vs [Deplasman]\n`;
+      prompt += `Skor: [X - Y]\n`;
+      prompt += `Tercih: [MS 1 / X / 2 - 2.5 Üst / KG Var vb.]\n`;
+      prompt += `Güven: [%XX]\n`;
+      prompt += `Analiz: [1-2 cümlelik kısa özet]\n`;
+      prompt += `\`\`\`\n\n`;
+      prompt += `4. Şablondaki etiketleri (Maç:, Skor:, Tercih:, Güven:, Analiz:) harfi harfine koru. Asla kalınlaştırma (**), yıldız (*) veya altçizgi (_) kullanma, düz metin olarak kod bloğuna yerleştir.\n\n`;
+      prompt += `Şimdi doğrudan tek bir markdown kod bloğu içinde yukarıdaki şablona tam uyarak maçları ve tahminlerini sırala:`;
+    } else {
+      prompt += `\nDoğrudan maç listesi ve tahminlere geçebilirsin. Teşekkürler!`;
     }
-
-    prompt += `\nDoğrudan maç listesi ve tahminlere geçebilirsin. Teşekkürler!`;
 
     const txtArea = document.getElementById('promptTextArea');
     if (txtArea) txtArea.value = prompt;
@@ -165,65 +185,112 @@ class AIMatchPulseApp {
     const results = [];
     let currentMatch = null;
 
-    for (let i = 0; i < lines.length; i++) {
-      let line = lines[i].trim();
-      if (!line) continue;
+    const finalizeMatch = () => {
+      if (currentMatch && currentMatch.home && currentMatch.away && currentMatch.score) {
+        results.push({ ...currentMatch });
+      }
+      currentMatch = null;
+    };
 
-      const blockMatch = line.match(/^(?:Maç|Mac|Karşılaşma|Karsilasma|Oyun)\s*[:\-]\s*(.+?)(?:\s*(?:vs\.?|karşısında|-|–|—)\s*)(.+)$/i);
+    for (let i = 0; i < lines.length; i++) {
+      let rawLine = lines[i].trim();
+      if (!rawLine) continue;
+
+      // 1. Markdown kod bloğu sınırlarını yok say (```, ```text, ```markdown vb.)
+      if (rawLine.startsWith('```')) continue;
+
+      // 2. Ayırıcı çizgiler (--- veya ___ veya ***)
+      if (/^[\-\_\*]{3,}$/.test(rawLine)) {
+        finalizeMatch();
+        continue;
+      }
+
+      // 3. Satırdaki markdown kalınlaştırma (**), italik (*, _) ve backtick (`) temizliği
+      let cleanLine = rawLine.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '').trim();
+
+      // 4. Maç Satırı Tespiti (Maç: Ev Sahibi vs Deplasman)
+      const blockMatch = cleanLine.match(/^(?:Maç|Mac|Karşılaşma|Karsilasma|Oyun|Match)\s*[:\-]\s*(.+?)(?:\s*(?:vs\.?|karşısında|-|–|—)\s*)(.+)$/i);
       if (blockMatch) {
-        if (currentMatch && currentMatch.home && currentMatch.score) results.push(currentMatch);
+        finalizeMatch();
         currentMatch = {
           home: blockMatch[1].trim(),
           away: blockMatch[2].trim(),
           score: null,
           tip: '',
-          confidence: ''
+          confidence: '',
+          analysis: ''
         };
         continue;
       }
 
+      // 5. Eğer bir maç bloğunun içindeysek diğer özellikleri topla
       if (currentMatch) {
-        const scoreMatch = line.match(/(?:Skor|Skor Tahmini|Sonuç)\s*[:\-]\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})/i);
+        // Skor Tespiti: Skor: 2 - 1 veya 2-1
+        const scoreMatch = cleanLine.match(/^(?:Skor|Skor Tahmini|Tahmini Skor|Sonuç|Score)\s*[:\-]\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})/i);
         if (scoreMatch) {
           currentMatch.score = `${scoreMatch[1]}-${scoreMatch[2]}`;
           continue;
         }
-        const tipMatch = line.match(/(?:Tercih|Tahmin|Öneri)\s*[:\-]\s*(.+)/i);
+
+        // Tercih Tespiti
+        const tipMatch = cleanLine.match(/^(?:Tercih|Tahmin|Öneri|Bahis|Tip)\s*[:\-]\s*(.+)/i);
         if (tipMatch) {
           currentMatch.tip = tipMatch[1].trim();
           continue;
         }
+
+        // Güven Tespiti
+        const confMatch = cleanLine.match(/^(?:Güven|Guven|Güven Oranı|Guven Orani|Confidence)\s*[:\-]\s*(.+)/i);
+        if (confMatch) {
+          currentMatch.confidence = confMatch[1].trim();
+          continue;
+        }
+
+        // Analiz Tespiti
+        const analysisMatch = cleanLine.match(/^(?:Analiz|Yorum|Açıklama|Aciklama|Özet|Ozet|Analysis)\s*[:\-]\s*(.+)/i);
+        if (analysisMatch) {
+          currentMatch.analysis = analysisMatch[1].trim();
+          continue;
+        }
       }
 
-      const singleLineMatch = line.match(/(?:[\d\.\-\*\#]+\s*)?([A-Za-z0-9çğıöşüÇĞİÖŞÜ\s\.]+?)\s*(?:vs\.?|karşısında|-|–|—)\s*([A-Za-z0-9çğıöşüÇĞİÖŞÜ\s\.]+?)(?:[\:\-–\|]|\s+skor\s*[:\-]?\s*)\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})(.*)$/i);
+      // 6. Tek Satır Formatı (Fallback: "Real Madrid vs Barcelona: 2-1 (KG Var)")
+      const singleLineMatch = cleanLine.match(/(?:[\d\.\-\*\#\)]+\s*)?([A-Za-z0-9çğıöşüÇĞİÖŞÜ\s\.]+?)\s*(?:vs\.?|karşısında|-|–|—)\s*([A-Za-z0-9çğıöşüÇĞİÖŞÜ\s\.]+?)(?:[\:\-–\|]|\s+skor\s*[:\-]?\s*)\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})(.*)$/i);
       if (singleLineMatch) {
+        finalizeMatch();
         results.push({
           home: singleLineMatch[1].trim(),
           away: singleLineMatch[2].trim(),
           score: `${singleLineMatch[3]}-${singleLineMatch[4]}`,
-          tip: singleLineMatch[5] ? singleLineMatch[5].trim() : ''
+          tip: singleLineMatch[5] ? singleLineMatch[5].replace(/^[\(\[\:\s\-–\|]+/, '').replace(/[\)\]\s]+$/, '').trim() : '',
+          confidence: '',
+          analysis: ''
         });
         continue;
       }
 
+      // 7. Genel Fallback: Satırda takım vs takım ve X-Y skoru varsa
       const scorePattern = /\b(\d{1,2})\s*[-–:]\s*(\d{1,2})\b/;
-      const foundScore = line.match(scorePattern);
-      if (foundScore && (line.includes(' vs ') || line.includes(' - ') || line.includes(' – '))) {
-        const parts = line.split(foundScore[0]);
+      const foundScore = cleanLine.match(scorePattern);
+      if (foundScore && (cleanLine.includes(' vs ') || cleanLine.includes(' - ') || cleanLine.includes(' – '))) {
+        const parts = cleanLine.split(foundScore[0]);
         const teamsPart = parts[0].replace(/^[\d\.\-\*\#\s\)]+/, '').trim();
         const teamSplit = teamsPart.split(/\s+(?:vs\.?|-|–|—)\s+/i);
         if (teamSplit.length >= 2) {
+          finalizeMatch();
           results.push({
             home: teamSplit[0].trim(),
             away: teamSplit[1].trim(),
             score: `${foundScore[1]}-${foundScore[2]}`,
-            tip: parts[1] ? parts[1].trim() : ''
+            tip: parts[1] ? parts[1].replace(/^[\(\[\:\s\-–\|]+/, '').replace(/[\)\]\s]+$/, '').trim() : '',
+            confidence: '',
+            analysis: ''
           });
         }
       }
     }
 
-    if (currentMatch && currentMatch.home && currentMatch.score) results.push(currentMatch);
+    finalizeMatch();
     return results;
   }
 
@@ -247,7 +314,7 @@ class AIMatchPulseApp {
 
     if (parsed.length === 0) {
       if (statusMsg) {
-        statusMsg.innerHTML = `<span style="color: var(--accent-yellow);">⚠️ Skorlu maç tespit edilemedi. 'Takım A vs Takım B: X-Y' formatında olduğundan emin olun.</span>`;
+        statusMsg.innerHTML = `<span style="color: var(--accent-yellow);">⚠️ Skorlu maç tespit edilemedi. Kod bloğunu eksiksiz yapıştırdığınızdan emin olun.</span>`;
       }
       return;
     }
@@ -273,7 +340,9 @@ class AIMatchPulseApp {
 
       this.matchesData[key].predictions[aiSource] = {
         score: item.score,
-        tip: item.tip
+        tip: item.tip,
+        confidence: item.confidence || '',
+        analysis: item.analysis || ''
       };
     });
 
@@ -281,7 +350,7 @@ class AIMatchPulseApp {
     if (rawInput) rawInput.value = '';
 
     if (statusMsg) {
-      statusMsg.innerHTML = `<span style="color: var(--accent-green);">✓ <b>${aiSource}</b> kaynağından ${parsed.length} maç eşleştirildi.</span>`;
+      statusMsg.innerHTML = `<span style="color: var(--accent-green);">✓ <b>${aiSource}</b> kaynağından ${parsed.length} maç başarıyla eşleştirildi.</span>`;
     }
     this.showToast('Tablo Güncellendi! ⚡', `${aiSource} için ${parsed.length} maç başarıyla eklendi.`);
     this.renderTable();
@@ -645,13 +714,20 @@ class AIMatchPulseApp {
               `;
             }
 
+            const tipParts = [];
+            if (pred.tip) tipParts.push(pred.tip);
+            if (pred.confidence) tipParts.push(pred.confidence);
+            const tipText = tipParts.join(' • ');
+            const safeAnalysis = (pred.analysis || '').replace(/"/g, '&quot;');
+            const cellTitle = safeAnalysis ? `title="Analiz: ${safeAnalysis}"` : (tipText ? `title="${tipText}"` : '');
+
             rHtml += `
-              <td style="text-align: center;">
+              <td style="text-align: center;" ${cellTitle}>
                 <div style="display: inline-flex; flex-direction: column; align-items: center; gap: 2px;">
                   <span style="background: var(--bg-secondary); padding: 3px 8px; border-radius: 6px; font-family: var(--font-mono); font-weight: bold; font-size: 12px; border: 1px solid var(--border-color); color: var(--text-primary);">
                     ${pred.score}
                   </span>
-                  ${pred.tip ? `<span style="font-size: 10px; color: var(--text-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pred.tip}</span>` : ''}
+                  ${tipText ? `<span style="font-size: 10px; color: var(--text-muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${tipText}</span>` : ''}
                   ${badgeHtml}
                 </div>
               </td>

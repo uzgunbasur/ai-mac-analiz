@@ -502,7 +502,7 @@
           <span class="card-icon">✨</span>
           <div>
             <h3 class="card-title">Günün Maç Tahmini Prompt Üreticisi</h3>
-            <p class="card-desc">Günün gerçek tarihine göre optimize edilen ve yapay zekalardan standart çıktı alan prompt şablonu.</p>
+            <p class="card-desc">ChatGPT, Claude vb. yapay zekalardan tek tıkla <b>'Copy'</b> edilebilen Markdown kod bloğu formatında standart maç tahminleri alan prompt üreticisi.</p>
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -529,21 +529,21 @@
         </label>
         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
           <input type="checkbox" id="optStandart" checked style="accent-color: var(--accent-green); cursor: pointer;">
-          <span>Standart Format Zorunluluğu</span>
+          <span>Tek Tık 'Copy' Kod Bloğu Şablonu (Zorunlu)</span>
         </label>
       </div>
 
       <!-- Prompt Gösterim Kutusu -->
       <div style="position: relative;">
-        <textarea id="promptTextArea" readonly rows="5" class="notion-textarea" style="font-size: 12px; resize: vertical;"></textarea>
+        <textarea id="promptTextArea" readonly rows="8" class="notion-textarea" style="font-size: 12px; resize: vertical; line-height: 1.5;"></textarea>
         
-        <button id="copyPromptBtn" class="notion-btn notion-btn-primary" style="position: absolute; bottom: 10px; right: 10px;">
+        <button id="copyPromptBtn" class="notion-btn notion-btn-primary" style="position: absolute; bottom: 12px; right: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
           <span>📋</span> <span id="copyBtnText">Promptu Kopyala</span>
         </button>
       </div>
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--text-muted);">
-        <span>💡 Bu promptu ChatGPT, Claude, Gemini veya DeepSeek'e gönderin; yanıtı aşağıdaki kutudan sisteme ekleyin.</span>
+        <span>💡 <b>Kullanım Kolaylığı:</b> Bu promptu ChatGPT, Claude veya Gemini'ye gönderin. Yapay zekanın ürettiği kod bloğunun sağ üstündeki <b>'Copy'</b> butonuna basarak tek tıkla kopyalayın ve aşağıdaki alana yapıştırın.</span>
       </div>
     </section>
 
@@ -554,7 +554,7 @@
           <span class="card-icon">⚡</span>
           <div>
             <h3 class="card-title">Ham AI Tahmin Metni Girişi</h3>
-            <p class="card-desc">Yapay zekadan aldığınız yanıtı olduğu gibi yapıştırın; sistem maçları ve skorları otomatik ayrıştırır.</p>
+            <p class="card-desc">Yapay zekanın kod bloğundan kopyaladığınız tahmin metnini yapıştırın; maçlar ve skorlar sırayla eşleşir.</p>
           </div>
         </div>
 
@@ -570,15 +570,24 @@
         </div>
       </div>
 
-      <textarea id="rawTextInput" rows="4" placeholder="Yapay zekadan gelen metni buraya yapıştırın...
-Örn:
-Real Madrid vs Barcelona: 2-1 (KG Var)
-Manchester City - Arsenal | Skor: 1-1
-Inter vs Juventus -> 2-0..." class="notion-textarea" style="font-size: 12px; resize: vertical; margin-bottom: 12px;"></textarea>
+      <textarea id="rawTextInput" rows="5" placeholder="Yapay zekanın kod bloğundaki 'Copy' butonuna basarak yanıtı buraya yapıştırın...
+
+Örnek Şablon:
+Maç: Real Madrid vs Barcelona
+Skor: 2 - 1
+Tercih: MS 1
+Güven: %75
+Analiz: Real Madrid iç sahada son 5 derbiyi kazandı.
+---
+Maç: Arsenal vs Chelsea
+Skor: 1 - 1
+Tercih: KG Var
+Güven: %70
+Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textarea" style="font-size: 12px; resize: vertical; margin-bottom: 12px;"></textarea>
 
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
         <span id="parseStatusText" style="font-size: 12px; color: var(--text-muted);">
-          Format fark etmez; takım adları ve skorlar akıllıca eşleştirilir.
+          Format fark etmez; standart kod bloğu veya ham metinler akıllıca eşleştirilir.
         </span>
         <button id="btnProcessRaw" class="notion-btn notion-btn-primary">
           <span>⚡ Tahminleri Ekle & Kıyasla</span>
