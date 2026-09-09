@@ -70,18 +70,32 @@ class AIMatchPulseApp {
     const parts = dateVal ? dateVal.split('-') : [];
     const dateObj = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
     const formattedDate = this.getTurkishFormattedDate(dateObj);
+    const dayStr = String(dateObj.getDate()).padStart(2, '0');
+    const monthStr = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const yearStr = dateObj.getFullYear();
+    const numericDate = `${dayStr}.${monthStr}.${yearStr}`;
 
     const badge = document.getElementById('currentDateBadge');
-    if (badge) badge.innerText = formattedDate;
+    if (badge) badge.innerText = `${numericDate} (${formattedDate})`;
 
+    const optRealFixture = document.getElementById('optRealFixture')?.checked ?? true;
     const optOdds = document.getElementById('optOdds')?.checked;
     const optSurprise = document.getElementById('optSurprise')?.checked;
     const optScore = document.getElementById('optScore')?.checked;
     const optStandart = document.getElementById('optStandart')?.checked;
 
-    let prompt = `Merhaba! Bugünün (${formattedDate}) oynanacak en önemli futbol maçlarını analiz etmeni ve net skor tahminlerini sunmanı istiyorum.\n\n`;
+    let prompt = `Merhaba! Bugünün (${numericDate} - ${formattedDate}) oynanacak en önemli futbol maçlarını analiz etmeni ve net skor tahminlerini sunmanı istiyorum.\n\n`;
+
+    if (optRealFixture) {
+      prompt += `🚨 'YALNIZCA GERÇEK FİKSTÜR KURALI' (HAYALİ MAÇ UYDURMAK KESİNLİKLE YASAKTIR):\n`;
+      prompt += `1. Bugünün gerçek tarihinde (${numericDate}) UEFA Şampiyonlar Ligi veya dünyada oynanacak GERÇEK RESMİ MAÇLARI baz alacaksın.\n`;
+      prompt += `2. Gerekirse web arama veya güncel veri motorunu kullanarak bugünün (${numericDate}) resmi fikstürünü teyit et.\n`;
+      prompt += `3. ASLA VE ASLA hayali, geçmişte kalmış veya o gün takvimde oynamayacak maçlar (Türkiye vs İskoçya, Brezilya vs Arjantin vb.) UYDURMAYACAKSIN.\n`;
+      prompt += `4. Eğer o gün oynanan resmi üst düzey maç yoksa, bunu açıkça belirt ve sadece o tarihte gerçekten oynanacak resmi fikstürdeki maçları listele.\n\n`;
+    }
+
     prompt += `ANALİZ ODAK NOKTALARI:\n`;
-    prompt += `1. Bugünün öne çıkan (UEFA Şampiyonlar Ligi / Avrupa Kupaları / Süper Lig / Premier Lig / Popüler Ligler) maçlarını listele.\n`;
+    prompt += `1. Bugünün (${numericDate}) öne çıkan resmi fikstür maçlarını seç.\n`;
 
     if (optOdds) {
       prompt += `2. Takımların form durumları, hücum/savunma dengesi ve maçın favorisini belirt.\n`;
@@ -115,9 +129,9 @@ class AIMatchPulseApp {
       prompt += `Analiz: [1-2 cümlelik kısa özet]\n`;
       prompt += `\`\`\`\n\n`;
       prompt += `4. Şablondaki etiketleri (Maç:, Skor:, Tercih:, Güven:, Analiz:) harfi harfine koru. Asla kalınlaştırma (**), yıldız (*) veya altçizgi (_) kullanma, düz metin olarak kod bloğuna yerleştir.\n\n`;
-      prompt += `Şimdi doğrudan tek bir markdown kod bloğu içinde yukarıdaki şablona tam uyarak maçları ve tahminlerini sırala:`;
+      prompt += `Şimdi doğrudan tek bir markdown kod bloğu içinde yukarıdaki şablona tam uyarak bugünün (${numericDate}) GERÇEK maçlarını ve tahminlerini sırala:`;
     } else {
-      prompt += `\nDoğrudan maç listesi ve tahminlere geçebilirsin. Teşekkürler!`;
+      prompt += `\nDoğrudan bugünün (${numericDate}) gerçek maç listesi ve tahminlere geçebilirsin. Teşekkürler!`;
     }
 
     const txtArea = document.getElementById('promptTextArea');
@@ -930,8 +944,9 @@ class AIMatchPulseApp {
   }
 
   setupEventListeners() {
-    // Tarih Değişimi
+    // Tarih Değişimi & Parametreler
     document.getElementById('promptDateInput')?.addEventListener('change', () => this.updateDynamicPrompt());
+    document.getElementById('optRealFixture')?.addEventListener('change', () => this.updateDynamicPrompt());
     document.getElementById('optOdds')?.addEventListener('change', () => this.updateDynamicPrompt());
     document.getElementById('optSurprise')?.addEventListener('change', () => this.updateDynamicPrompt());
     document.getElementById('optScore')?.addEventListener('change', () => this.updateDynamicPrompt());
