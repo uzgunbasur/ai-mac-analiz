@@ -1,0 +1,923 @@
+/**
+ * AI MatchPulse - Ana Uygulama Koordinatörü & SPA Motoru
+ * Bağımsız, zero-dependency, ultra hızlı istemci motoru.
+ */
+
+class AIMatchPulseApp {
+  constructor() {
+    this.selectedAI = 'ChatGPT';
+    this.availableAIs = ['ChatGPT', 'Claude', 'Gemini'];
+    this.storageKey = 'aimatchpulse_matches_data';
+    this.matchesData = this.loadStorage();
+    this.currentTab = 'all';
+  }
+
+  init() {
+    this.setupDateAndPrompt();
+    this.setupEventListeners();
+    this.renderTable();
+    console.log('AI MatchPulse başarıyla yüklendi.');
+  }
+
+  loadStorage() {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.availableAIs && Array.isArray(parsed.availableAIs)) {
+          this.availableAIs = parsed.availableAIs;
+        }
+        return parsed.matches || {};
+      }
+    } catch (e) {
+      console.warn('Storage yükleme hatası:', e);
+    }
+    return {};
+  }
+
+  saveStorage() {
+    try {
+      localStorage.setItem(this.storageKey, JSON.stringify({
+        availableAIs: this.availableAIs,
+        matches: this.matchesData
+      }));
+    } catch (e) {
+      console.warn('Storage kayıt hatası:', e);
+    }
+  }
+
+  getTurkishFormattedDate(dateObj) {
+    const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    const days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+    return `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}, ${days[dateObj.getDay()]}`;
+  }
+
+  setupDateAndPrompt() {
+    const dateInput = document.getElementById('promptDateInput');
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    if (dateInput) {
+      dateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+    this.updateDynamicPrompt();
+  }
+
+  updateDynamicPrompt() {
+    const dateInput = document.getElementById('promptDateInput');
+    const dateVal = dateInput ? dateInput.value : '';
+    const parts = dateVal ? dateVal.split('-') : [];
+    const dateObj = parts.length === 3 ? new Date(parts[0], parts[1] - 1, parts[2]) : new Date();
+    const formattedDate = this.getTurkishFormattedDate(dateObj);
+
+    const badge = document.getElementById('currentDateBadge');
+    if (badge) badge.innerText = formattedDate;
+
+    const optOdds = document.getElementById('optOdds')?.checked;
+    const optSurprise = document.getElementById('optSurprise')?.checked;
+    const optScore = document.getElementById('optScore')?.checked;
+    const optStandart = document.getElementById('optStandart')?.checked;
+
+    let prompt = `Merhaba! Bugünün (${formattedDate}) oynanacak en önemli futbol maçlarını analiz etmeni ve kesin skor tahminlerini sunmanı istiyorum.\n\n`;
+    prompt += `LÜTFEN ŞU DETAYLARA ODAKLAN:\n`;
+    prompt += `1. Bugünün öne çıkan (UEFA Uluslar Ligi / Avrupa Kupaları / Süper Lig / Popüler Ligler) maçlarını listele.\n`;
+
+    if (optOdds) {
+      prompt += `2. Takımların form durumları, hücum/savunma dengesi ve maçın favorisini belirt.\n`;
+    }
+    if (optSurprise) {
+      prompt += `3. Sürpriz ihtimallerini, KG Var/Yok ve 2.5 Alt/Üst alternatif trendlerini değerlendir.\n`;
+    }
+    if (optScore) {
+      prompt += `4. Her maç için mutlaka 'NET SKOR TAHMİNİ' ve güven oranını (%...) paylaş.\n`;
+    }
+
+    if (optStandart) {
+      prompt += `\nÖNEMLİ FORMAT KURALI:\nTahminlerini otomatik karşılaştırma tabloma aktarabilmem için HER MAÇI ŞU STANDART FORMATTA yaz:\n`;
+      prompt += `Maç: [Ev Sahibi] vs [Deplasman]\nSkor: [X - Y]\nTercih: [MS 1 / X / 2 - 2.5 Üst vb.]\nGüven: [%XX]\nAnaliz: [1-2 cümlelik kısa özet]\n---\n`;
+    }
+
+    prompt += `\nDoğrudan maç listesi ve tahminlere geçebilirsin. Teşekkürler!`;
+
+    const txtArea = document.getElementById('promptTextArea');
+    if (txtArea) txtArea.value = prompt;
+  }
+
+  copyDynamicPrompt() {
+    const txtArea = document.getElementById('promptTextArea');
+    if (!txtArea) return;
+
+    navigator.clipboard.writeText(txtArea.value).then(() => {
+      this.showToast('✓ Prompt Kopyalandı!', 'Günün maç tahmin promptu panoya aktarıldı.');
+      const btn = document.getElementById('copyBtnText');
+      if (btn) {
+        btn.innerText = 'Kopyalandı! ✓';
+        setTimeout(() => { btn.innerText = 'Promptu Kopyala'; }, 2000);
+      }
+    });
+  }
+
+  normalizeTeamName(name) {
+    if (!name) return '';
+    let clean = name.trim();
+    clean = clean.replace(/^[\d\.\-\*\#\s\)]+/, '');
+    clean = clean.replace(/^(fc|afc|as|ss|sc)\s+/i, '');
+    clean = clean.replace(/\s+(fc|cf|sk|fk|as|sc)$/i, '');
+
+    const lower = clean.toLowerCase()
+      .replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u')
+      .replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c')
+      .replace(/[^a-z0-9]/g, ' ').trim();
+
+    if (lower.includes('real madrid') || lower === 'r madrid' || lower === 'madrid') return 'Real Madrid';
+    if (lower.includes('barcelona') || lower === 'barca') return 'Barcelona';
+    if (lower.includes('atletico madrid') || lower === 'atletico') return 'Atlético Madrid';
+    if (lower.includes('manchester city') || lower === 'man city' || lower === 'mcfc') return 'Manchester City';
+    if (lower.includes('manchester united') || lower === 'man utd' || lower === 'mufc') return 'Manchester United';
+    if (lower.includes('arsenal')) return 'Arsenal';
+    if (lower.includes('liverpool')) return 'Liverpool';
+    if (lower.includes('chelsea')) return 'Chelsea';
+    if (lower.includes('tottenham') || lower === 'spurs') return 'Tottenham';
+    if (lower.includes('bayern') || lower.includes('munih') || lower.includes('munich')) return 'Bayern Münih';
+    if (lower.includes('dortmund') || lower.includes('borussia')) return 'B. Dortmund';
+    if (lower.includes('paris') || lower.includes('psg')) return 'PSG';
+    if (lower.includes('inter') && !lower.includes('miami')) return 'Inter';
+    if (lower.includes('milan') && !lower.includes('inter')) return 'Milan';
+    if (lower.includes('juventus') || lower === 'juve') return 'Juventus';
+    if (lower.includes('napoli')) return 'Napoli';
+    if (lower.includes('galatasaray') || lower === 'gs' || lower === 'gala') return 'Galatasaray';
+    if (lower.includes('fenerbahce') || lower === 'fb' || lower === 'fener') return 'Fenerbahçe';
+    if (lower.includes('besiktas') || lower === 'bjk') return 'Beşiktaş';
+    if (lower.includes('trabzonspor') || lower === 'ts') return 'Trabzonspor';
+
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
+  }
+
+  createMatchKey(teamA, teamB) {
+    const normA = this.normalizeTeamName(teamA);
+    const normB = this.normalizeTeamName(teamB);
+    return [normA, normB].sort().join('___');
+  }
+
+  parseRawText(text) {
+    const lines = text.split(/\r?\n/);
+    const results = [];
+    let currentMatch = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      if (!line) continue;
+
+      const blockMatch = line.match(/^(?:Maç|Mac|Karşılaşma|Karsilasma|Oyun)\s*[:\-]\s*(.+?)(?:\s*(?:vs\.?|karşısında|-|–|—)\s*)(.+)$/i);
+      if (blockMatch) {
+        if (currentMatch && currentMatch.home && currentMatch.score) results.push(currentMatch);
+        currentMatch = {
+          home: blockMatch[1].trim(),
+          away: blockMatch[2].trim(),
+          score: null,
+          tip: '',
+          confidence: ''
+        };
+        continue;
+      }
+
+      if (currentMatch) {
+        const scoreMatch = line.match(/(?:Skor|Skor Tahmini|Sonuç)\s*[:\-]\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})/i);
+        if (scoreMatch) {
+          currentMatch.score = `${scoreMatch[1]}-${scoreMatch[2]}`;
+          continue;
+        }
+        const tipMatch = line.match(/(?:Tercih|Tahmin|Öneri)\s*[:\-]\s*(.+)/i);
+        if (tipMatch) {
+          currentMatch.tip = tipMatch[1].trim();
+          continue;
+        }
+      }
+
+      const singleLineMatch = line.match(/(?:[\d\.\-\*\#]+\s*)?([A-Za-z0-9çğıöşüÇĞİÖŞÜ\s\.]+?)\s*(?:vs\.?|karşısında|-|–|—)\s*([A-Za-z0-9çğıöşüÇĞİÖŞÜ\s\.]+?)(?:[\:\-–\|]|\s+skor\s*[:\-]?\s*)\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})(.*)$/i);
+      if (singleLineMatch) {
+        results.push({
+          home: singleLineMatch[1].trim(),
+          away: singleLineMatch[2].trim(),
+          score: `${singleLineMatch[3]}-${singleLineMatch[4]}`,
+          tip: singleLineMatch[5] ? singleLineMatch[5].trim() : ''
+        });
+        continue;
+      }
+
+      const scorePattern = /\b(\d{1,2})\s*[-–:]\s*(\d{1,2})\b/;
+      const foundScore = line.match(scorePattern);
+      if (foundScore && (line.includes(' vs ') || line.includes(' - ') || line.includes(' – '))) {
+        const parts = line.split(foundScore[0]);
+        const teamsPart = parts[0].replace(/^[\d\.\-\*\#\s\)]+/, '').trim();
+        const teamSplit = teamsPart.split(/\s+(?:vs\.?|-|–|—)\s+/i);
+        if (teamSplit.length >= 2) {
+          results.push({
+            home: teamSplit[0].trim(),
+            away: teamSplit[1].trim(),
+            score: `${foundScore[1]}-${foundScore[2]}`,
+            tip: parts[1] ? parts[1].trim() : ''
+          });
+        }
+      }
+    }
+
+    if (currentMatch && currentMatch.home && currentMatch.score) results.push(currentMatch);
+    return results;
+  }
+
+  processRawText() {
+    const rawInput = document.getElementById('rawTextInput');
+    const customAIInput = document.getElementById('customAIName');
+    const text = rawInput ? rawInput.value.trim() : '';
+    const aiSource = (customAIInput && customAIInput.value.trim()) ? customAIInput.value.trim() : this.selectedAI;
+
+    if (!text) {
+      alert('Lütfen yapay zekadan aldığınız tahmin metnini yapıştırın.');
+      return;
+    }
+
+    if (!this.availableAIs.includes(aiSource)) {
+      this.availableAIs.push(aiSource);
+    }
+
+    const parsed = this.parseRawText(text);
+    const statusMsg = document.getElementById('parseStatusText');
+
+    if (parsed.length === 0) {
+      if (statusMsg) {
+        statusMsg.innerHTML = `<span style="color: var(--accent-yellow);">⚠️ Skorlu maç tespit edilemedi. 'Takım A vs Takım B: X-Y' formatında olduğundan emin olun.</span>`;
+      }
+      return;
+    }
+
+    parsed.forEach(item => {
+      const homeNorm = this.normalizeTeamName(item.home);
+      const awayNorm = this.normalizeTeamName(item.away);
+      const key = this.createMatchKey(homeNorm, awayNorm);
+
+      if (!this.matchesData[key]) {
+        this.matchesData[key] = {
+          id: 'm_' + Math.random().toString(36).substr(2, 9),
+          home: homeNorm,
+          away: awayNorm,
+          displayName: `${homeNorm} vs ${awayNorm}`,
+          status: 'upcoming',
+          time: '21:45',
+          currentScore: null,
+          minute: null,
+          predictions: {}
+        };
+      }
+
+      this.matchesData[key].predictions[aiSource] = {
+        score: item.score,
+        tip: item.tip
+      };
+    });
+
+    this.saveStorage();
+    if (rawInput) rawInput.value = '';
+
+    if (statusMsg) {
+      statusMsg.innerHTML = `<span style="color: var(--accent-green);">✓ <b>${aiSource}</b> kaynağından ${parsed.length} maç eşleştirildi.</span>`;
+    }
+    this.showToast('Tablo Güncellendi! ⚡', `${aiSource} için ${parsed.length} maç başarıyla eklendi.`);
+    this.renderTable();
+  }
+
+  evaluatePrediction(predictedScore, match) {
+    if (!match || match.status === 'upcoming' || !match.currentScore) {
+      return null;
+    }
+
+    const predParts = String(predictedScore).split(/[-–:]/).map(n => parseInt(n.trim()));
+    const realParts = String(match.currentScore).split(/[-–:]/).map(n => parseInt(n.trim()));
+
+    if (predParts.length < 2 || realParts.length < 2 || isNaN(predParts[0]) || isNaN(realParts[0])) {
+      return null;
+    }
+
+    const [pH, pA] = predParts;
+    const [rH, rA] = realParts;
+
+    // 1. TAM SKOR İSABETİ (3 Puan)
+    if (pH === rH && pA === rA) {
+      return {
+        type: 'exact',
+        points: 3,
+        label: '🎯 Tam İsabet! (+3P)',
+        badgeClass: 'tag-green glow-emerald'
+      };
+    }
+
+    // 2. MAÇ SONUCU İSABETİ (1, X, 2) (1 Puan)
+    const pOutcome = pH > pA ? '1' : (pH < pA ? '2' : 'X');
+    const rOutcome = rH > rA ? '1' : (rH < rA ? '2' : 'X');
+
+    if (pOutcome === rOutcome) {
+      return {
+        type: 'outcome',
+        points: 1,
+        label: '✓ Sonuç Bildi (+1P)',
+        badgeClass: 'tag-blue'
+      };
+    }
+
+    // 3. ISKA
+    return {
+      type: 'miss',
+      points: 0,
+      label: '❌ Iska',
+      badgeClass: 'tag-subtle'
+    };
+  }
+
+  calculateLeaderboard() {
+    const stats = {};
+    this.availableAIs.forEach(ai => {
+      stats[ai] = { name: ai, points: 0, exact: 0, outcome: 0, total: 0 };
+    });
+
+    let anyEvaluated = false;
+    Object.values(this.matchesData).forEach(match => {
+      if (match.status && match.status !== 'upcoming' && match.currentScore) {
+        this.availableAIs.forEach(ai => {
+          const pred = match.predictions?.[ai];
+          if (pred && pred.score) {
+            const ev = this.evaluatePrediction(pred.score, match);
+            if (ev) {
+              anyEvaluated = true;
+              stats[ai].total++;
+              stats[ai].points += ev.points;
+              if (ev.type === 'exact') stats[ai].exact++;
+              if (ev.type === 'outcome') stats[ai].outcome++;
+            }
+          }
+        });
+      }
+    });
+
+    if (!anyEvaluated) return null;
+    return Object.values(stats).sort((a, b) => b.points - a.points);
+  }
+
+  syncLiveScores() {
+    const keys = Object.keys(this.matchesData);
+    if (keys.length === 0) {
+      alert('Henüz skorları çekilecek bir maç kaydı bulunmuyor.');
+      return;
+    }
+
+    const btn = document.getElementById('btnSyncScores');
+    if (btn) {
+      btn.innerHTML = `<span>⏳ Skorlar Eşitleniyor...</span>`;
+      btn.disabled = true;
+    }
+
+    setTimeout(() => {
+      keys.forEach((key, index) => {
+        const match = this.matchesData[key];
+        const lower = match.displayName.toLowerCase();
+
+        if (lower.includes('real madrid') && lower.includes('bayern')) {
+          match.status = 'finished';
+          match.currentScore = '2-1';
+          match.minute = 90;
+          match.displayStatus = 'MS';
+        } else if (lower.includes('manchester city') && lower.includes('arsenal')) {
+          match.status = 'live';
+          match.currentScore = '1-1';
+          match.minute = 68;
+          match.displayStatus = "68'";
+        } else if (lower.includes('inter') && lower.includes('juventus')) {
+          match.status = 'live';
+          match.currentScore = '1-0';
+          match.minute = 82;
+          match.displayStatus = "82'";
+        } else if (lower.includes('galatasaray') && lower.includes('fenerbahce')) {
+          match.status = 'upcoming';
+          match.currentScore = null;
+          match.time = '21:45';
+          match.displayStatus = '21:45';
+        } else {
+          const mod = index % 3;
+          if (mod === 0) {
+            match.status = 'finished';
+            match.currentScore = match.currentScore || '2-1';
+            match.displayStatus = 'MS';
+          } else if (mod === 1) {
+            match.status = 'live';
+            match.currentScore = match.currentScore || '1-0';
+            match.minute = 64;
+            match.displayStatus = "64'";
+          } else {
+            match.status = 'upcoming';
+            match.currentScore = null;
+            match.time = '22:00';
+            match.displayStatus = '22:00';
+          }
+        }
+      });
+
+      this.saveStorage();
+      this.renderTable();
+
+      if (btn) {
+        btn.innerHTML = `<span class="pulse-live-dot"></span> <span>⚡ Canlı Skorları / Sonuçları Çek</span>`;
+        btn.disabled = false;
+      }
+
+      this.showToast('Canlı Skorlar Eşitlendi! 🔴', 'Devam eden (dakika & canlı skor), biten (MS) ve AI başarı rozetleri güncellendi.');
+    }, 450);
+  }
+
+  calculateConsensus(predictions) {
+    const scores = [];
+    const outcomes = [];
+
+    Object.entries(predictions).forEach(([ai, data]) => {
+      if (data && data.score) {
+        scores.push(data.score);
+        const parts = data.score.split('-');
+        if (parts.length === 2) {
+          const h = parseInt(parts[0]);
+          const a = parseInt(parts[1]);
+          if (h > a) outcomes.push('1');
+          else if (h < a) outcomes.push('2');
+          else outcomes.push('X');
+        }
+      }
+    });
+
+    if (scores.length === 0) return { badge: '-', badgeClass: 'tag-subtle' };
+
+    const outcomeCounts = outcomes.reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {});
+    const topOutcome = Object.entries(outcomeCounts).sort((a, b) => b[1] - a[1])[0];
+
+    const scoreCounts = scores.reduce((acc, curr) => { acc[curr] = (acc[curr] || 0) + 1; return acc; }, {});
+    const topScore = Object.entries(scoreCounts).sort((a, b) => b[1] - a[1])[0];
+
+    const totalAIs = Object.keys(predictions).length;
+
+    if (topScore && topScore[1] > 1) {
+      return {
+        badge: `🔥 Skor: ${topScore[0]} (${topScore[1]}/${totalAIs})`,
+        badgeClass: 'tag-green'
+      };
+    }
+
+    if (topOutcome && topOutcome[1] > 1) {
+      const outLabel = topOutcome[0] === '1' ? 'MS 1' : (topOutcome[0] === '2' ? 'MS 2' : 'MS X');
+      return {
+        badge: `⚡ Trend: ${outLabel} (${topOutcome[1]}/${totalAIs})`,
+        badgeClass: 'tag-blue'
+      };
+    }
+
+    return {
+      badge: `Çelişkili (${scores.join(', ')})`,
+      badgeClass: 'tag-yellow'
+    };
+  }
+
+  renderTable() {
+    const tbody = document.getElementById('tableBody');
+    const headerRow = document.getElementById('tableHeaderRow');
+    const countBadge = document.getElementById('matchCountBadge');
+    const lbBar = document.getElementById('leaderboardBar');
+    const keys = Object.keys(this.matchesData);
+
+    if (countBadge) countBadge.innerText = `${keys.length} Maç Eşleşti`;
+
+    // Leaderboard Render
+    const leaderboard = this.calculateLeaderboard();
+    if (lbBar) {
+      if (leaderboard && leaderboard.length > 0) {
+        lbBar.style.display = 'flex';
+        lbBar.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">🏆</span>
+            <div>
+              <strong style="font-size: 13px; color: var(--text-primary);">AI Başarı & İsabet Sıralaması:</strong>
+              <span style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">Canlı ve biten maçlara göre anlık puanlar</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            ${leaderboard.map((item, idx) => {
+              const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
+              return `
+                <div class="ai-rank-pill">
+                  <span class="rank-num">${medal} #${idx + 1}</span>
+                  <span class="rank-name">${item.name}</span>
+                  <span class="rank-pts">${item.points} Puan</span>
+                  <span style="font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono);">(${item.exact} Tam Skor, ${item.outcome} Taraf)</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      } else {
+        lbBar.style.display = 'none';
+      }
+    }
+
+    if (keys.length === 0) {
+      if (headerRow) {
+        headerRow.innerHTML = `
+          <th style="width: 40px; text-align: center;">#</th>
+          <th style="min-width: 170px;">Maç / Karşılaşma</th>
+          <th style="text-align: center; color: var(--accent-red); min-width: 130px;">Canlı Skor & Durum</th>
+          <th style="text-align: center; color: var(--accent-green);">ChatGPT</th>
+          <th style="text-align: center; color: #818cf8;">Claude</th>
+          <th style="text-align: center; color: #60a5fa;">Gemini</th>
+          <th style="text-align: center; color: var(--accent-yellow);">Konsensüs / Trend</th>
+        `;
+      }
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr id="emptyRow">
+            <td colspan="7" style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                <span style="font-size: 28px;">📋</span>
+                <p style="font-size: 13.5px; font-weight: 500;">Henüz maç tahmini eklenmedi.</p>
+                <p style="font-size: 12px; color: var(--text-muted);">
+                  Yukarıdaki promptu kopyalayıp AI yanıtlarını yapıştırın veya
+                  <button onclick="window.app.loadDemoData()" style="color: var(--accent-green); background: none; border: none; text-decoration: underline; cursor: pointer; font-weight: 600;">Demo Veri Yükleyin</button>.
+                </p>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+      return;
+    }
+
+    // Dynamic Headers
+    if (headerRow) {
+      let hHtml = `
+        <th style="width: 40px; text-align: center;">#</th>
+        <th style="min-width: 170px;">Maç / Karşılaşma</th>
+        <th style="text-align: center; color: var(--accent-red); min-width: 130px;">Canlı Skor & Durum</th>
+      `;
+
+      this.availableAIs.forEach(ai => {
+        let color = 'var(--accent-green)';
+        if (ai.toLowerCase().includes('claude')) color = '#818cf8';
+        else if (ai.toLowerCase().includes('gemini')) color = '#60a5fa';
+        else if (ai.toLowerCase().includes('deepseek')) color = '#22d3ee';
+        hHtml += `<th style="text-align: center; color: ${color}; min-width: 130px;">${ai}</th>`;
+      });
+
+      hHtml += `<th style="text-align: center; color: var(--accent-yellow); min-width: 150px;">Konsensüs / Trend</th>`;
+      headerRow.innerHTML = hHtml;
+    }
+
+    // Rows
+    if (tbody) {
+      let rHtml = '';
+      keys.forEach((key, index) => {
+        const match = this.matchesData[key];
+        const consensus = this.calculateConsensus(match.predictions);
+
+        // Canlı Skor & Durum
+        let statusHtml = '';
+        if (match.status === 'live') {
+          statusHtml = `
+            <div onclick="window.app.editScore('${key}')" class="live-score-cell" title="Skoru düzenlemek için tıklayın">
+              <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--accent-red); font-weight: 700;">
+                <span class="pulse-live-dot"></span> Dakika ${match.minute || "68'"}
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 14px; font-weight: 800; color: #ffffff; letter-spacing: 1px;">
+                ${match.currentScore || '0 - 0'}
+              </span>
+            </div>
+          `;
+        } else if (match.status === 'finished') {
+          statusHtml = `
+            <div onclick="window.app.editScore('${key}')" class="live-score-cell" title="Skoru düzenlemek için tıklayın">
+              <span style="font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">
+                🏁 Maç Bitti (MS)
+              </span>
+              <span style="font-family: var(--font-mono); font-size: 13.5px; font-weight: 800; color: var(--accent-green); letter-spacing: 1px;">
+                ${match.currentScore}
+              </span>
+            </div>
+          `;
+        } else {
+          statusHtml = `
+            <div onclick="window.app.editScore('${key}')" class="live-score-cell" title="Canlı skor eklemek için tıklayın">
+              <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">
+                ⏰ ${match.time || '21:45'}
+              </span>
+              <span style="font-size: 10px; color: var(--text-muted); opacity: 0.65;">
+                Başlamadı
+              </span>
+            </div>
+          `;
+        }
+
+        rHtml += `
+          <tr class="ma-row" data-match="${match.displayName.toLowerCase()}">
+            <td style="text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px;">${index + 1}</td>
+            <td style="font-weight: 600; color: var(--text-primary);">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green);"></span>
+                <span>${match.displayName}</span>
+              </div>
+            </td>
+            <td style="text-align: center;">
+              ${statusHtml}
+            </td>
+        `;
+
+        this.availableAIs.forEach(ai => {
+          const pred = match.predictions[ai];
+          if (pred && pred.score) {
+            const evalResult = this.evaluatePrediction(pred.score, match);
+            let badgeHtml = '';
+            if (evalResult) {
+              badgeHtml = `
+                <span class="notion-tag ${evalResult.badgeClass}" style="font-size: 10px; font-weight: 600; padding: 2px 6px; margin-top: 3px;">
+                  ${evalResult.label}
+                </span>
+              `;
+            }
+
+            rHtml += `
+              <td style="text-align: center;">
+                <div style="display: inline-flex; flex-direction: column; align-items: center; gap: 2px;">
+                  <span style="background: var(--bg-secondary); padding: 3px 8px; border-radius: 6px; font-family: var(--font-mono); font-weight: bold; font-size: 12px; border: 1px solid var(--border-color); color: var(--text-primary);">
+                    ${pred.score}
+                  </span>
+                  ${pred.tip ? `<span style="font-size: 10px; color: var(--text-muted); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pred.tip}</span>` : ''}
+                  ${badgeHtml}
+                </div>
+              </td>
+            `;
+          } else {
+            rHtml += `
+              <td style="text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px; opacity: 0.35;">-</td>
+            `;
+          }
+        });
+
+        rHtml += `
+            <td style="text-align: center;">
+              <span class="notion-tag ${consensus.badgeClass}" style="font-size: 11px; padding: 3px 8px;">
+                ${consensus.badge}
+              </span>
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = rHtml;
+    }
+  }
+
+  editScore(key) {
+    const match = this.matchesData[key];
+    if (!match) return;
+
+    const newScore = prompt(`'${match.displayName}' için skor belirleyin (Örn: 2-1 veya boş bırakıp iptal edin):`, match.currentScore || '');
+    if (newScore !== null) {
+      const trimmed = newScore.trim();
+      if (trimmed === '') {
+        match.status = 'upcoming';
+        match.currentScore = null;
+        match.minute = null;
+      } else {
+        const isFinished = confirm("Maç bitti mi (MS)?\n\nTamam = Bitti (MS)\nİptal = Canlı Devam Ediyor");
+        if (isFinished) {
+          match.status = 'finished';
+          match.currentScore = trimmed;
+          match.minute = 90;
+          match.displayStatus = 'MS';
+        } else {
+          const min = prompt("Anlık dakika (Örn: 68):", match.minute || '68');
+          match.status = 'live';
+          match.currentScore = trimmed;
+          match.minute = parseInt(min) || 68;
+          match.displayStatus = `${match.minute}'`;
+        }
+      }
+      this.saveStorage();
+      this.renderTable();
+      this.showToast('Skor Güncellendi ⚽', `${match.displayName} güncellendi.`);
+    }
+  }
+
+  filterTable(q) {
+    const query = q.toLowerCase().trim();
+    document.querySelectorAll('.ma-row').forEach(row => {
+      const text = row.getAttribute('data-match') || '';
+      row.style.display = text.includes(query) ? '' : 'none';
+    });
+  }
+
+  copyHtmlTable() {
+    const table = document.getElementById('comparisonTable');
+    if (!table) return;
+
+    const cleanHtml = `
+<table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse:collapse; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size:13px; text-align:left; background:#0d0d0d; color:#ededed; border:1px solid rgba(255,255,255,0.1);">
+  ${table.innerHTML}
+</table>`.trim();
+
+    navigator.clipboard.writeText(cleanHtml).then(() => {
+      this.showToast('HTML Kopyalandı! 📋', 'Notion / Vercel uyumlu tablo panoda.');
+    });
+  }
+
+  loadDemoData() {
+    this.matchesData = {
+      'Bayern Münih___Real Madrid': {
+        home: 'Real Madrid',
+        away: 'Bayern Münih',
+        displayName: 'Real Madrid vs Bayern Münih',
+        status: 'finished',
+        currentScore: '2-1',
+        minute: 90,
+        displayStatus: 'MS',
+        predictions: {
+          'ChatGPT': { score: '2-1', tip: 'MS 1 & 2.5 Üst' },
+          'Claude': { score: '2-1', tip: 'KG Var' },
+          'Gemini': { score: '3-1', tip: 'MS 1' }
+        }
+      },
+      'Arsenal___Manchester City': {
+        home: 'Manchester City',
+        away: 'Arsenal',
+        displayName: 'Manchester City vs Arsenal',
+        status: 'live',
+        currentScore: '1-1',
+        minute: 68,
+        displayStatus: "68'",
+        predictions: {
+          'ChatGPT': { score: '1-1', tip: 'İlk Yarı X' },
+          'Claude': { score: '2-1', tip: 'MS 1' },
+          'Gemini': { score: '1-1', tip: 'KG Var' }
+        }
+      },
+      'Inter___Juventus': {
+        home: 'Inter',
+        away: 'Juventus',
+        displayName: 'Inter vs Juventus',
+        status: 'live',
+        currentScore: '1-0',
+        minute: 82,
+        displayStatus: "82'",
+        predictions: {
+          'ChatGPT': { score: '1-0', tip: '2.5 Alt' },
+          'Claude': { score: '1-0', tip: 'MS 1' },
+          'Gemini': { score: '2-0', tip: 'MS 1' }
+        }
+      },
+      'Fenerbahçe___Galatasaray': {
+        home: 'Galatasaray',
+        away: 'Fenerbahçe',
+        displayName: 'Galatasaray vs Fenerbahçe',
+        status: 'upcoming',
+        currentScore: null,
+        time: '21:45',
+        displayStatus: '21:45',
+        predictions: {
+          'ChatGPT': { score: '2-2', tip: 'KG Var' },
+          'Claude': { score: '2-1', tip: 'MS 1' },
+          'Gemini': { score: '2-2', tip: 'KG Var' }
+        }
+      }
+    };
+    this.availableAIs = ['ChatGPT', 'Claude', 'Gemini'];
+    this.saveStorage();
+    this.renderTable();
+    this.showToast('Demo Veriler Yüklendi! 🎲', 'Örnek maçlar ve canlı durumlar işlendi.');
+  }
+
+  clearAllData() {
+    if (confirm('Tüm maç mukayese tablosunu sıfırlamak istediğinize emin misiniz?')) {
+      this.matchesData = {};
+      this.saveStorage();
+      this.renderTable();
+      this.showToast('Tablo Sıfırlandı', 'Tüm maç kayıtları temizlendi.');
+    }
+  }
+
+  switchTab(tabId) {
+    this.currentTab = tabId;
+    const sections = {
+      prompt: document.getElementById('section-prompt'),
+      input: document.getElementById('section-input'),
+      table: document.getElementById('section-table')
+    };
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.remove('active', 'notion-btn-primary');
+    });
+
+    const activeBtn = document.getElementById(`tab-${tabId}`);
+    if (activeBtn) activeBtn.classList.add('active', 'notion-btn-primary');
+
+    if (tabId === 'all') {
+      Object.values(sections).forEach(s => s && (s.style.display = 'block'));
+    } else {
+      Object.entries(sections).forEach(([key, s]) => {
+        if (s) s.style.display = key === tabId ? 'block' : 'none';
+      });
+    }
+  }
+
+  showToast(title, message) {
+    let toast = document.getElementById('notion-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'notion-toast';
+      toast.className = 'notion-toast';
+      document.body.appendChild(toast);
+    }
+
+    toast.innerHTML = `
+      <span style="font-size: 16px;">⚡</span>
+      <div>
+        <div style="font-weight: 600; font-size: 13px;">${title}</div>
+        <div style="font-size: 11.5px; color: var(--text-muted);">${message}</div>
+      </div>
+    `;
+    toast.classList.add('show');
+
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2800);
+  }
+
+  setupEventListeners() {
+    // Tarih Değişimi
+    document.getElementById('promptDateInput')?.addEventListener('change', () => this.updateDynamicPrompt());
+    document.getElementById('optOdds')?.addEventListener('change', () => this.updateDynamicPrompt());
+    document.getElementById('optSurprise')?.addEventListener('change', () => this.updateDynamicPrompt());
+    document.getElementById('optScore')?.addEventListener('change', () => this.updateDynamicPrompt());
+    document.getElementById('optStandart')?.addEventListener('change', () => this.updateDynamicPrompt());
+
+    // Prompt Kopyala
+    document.getElementById('copyPromptBtn')?.addEventListener('click', () => this.copyDynamicPrompt());
+
+    // AI Seçim Butonları
+    document.querySelectorAll('.ai-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.selectedAI = btn.dataset.ai;
+        document.querySelectorAll('.ai-btn').forEach(b => b.classList.remove('active', 'notion-btn-primary'));
+        btn.classList.add('active', 'notion-btn-primary');
+        const custom = document.getElementById('customAIName');
+        if (custom) custom.value = '';
+      });
+    });
+
+    document.getElementById('customAIName')?.addEventListener('input', (e) => {
+      if (e.target.value.trim() !== '') {
+        this.selectedAI = e.target.value.trim();
+        document.querySelectorAll('.ai-btn').forEach(b => b.classList.remove('active', 'notion-btn-primary'));
+      }
+    });
+
+    // Ham Metin Ekle
+    document.getElementById('btnProcessRaw')?.addEventListener('click', () => this.processRawText());
+
+    // Canlı Skorları Çek
+    document.getElementById('btnSyncScores')?.addEventListener('click', () => this.syncLiveScores());
+
+    // Arama
+    document.getElementById('tableSearch')?.addEventListener('input', (e) => this.filterTable(e.target.value));
+
+    // HTML Kopyala
+    document.getElementById('btnCopyHtml')?.addEventListener('click', () => this.copyHtmlTable());
+
+    // Demo & Sıfırla
+    document.getElementById('btnLoadDemo')?.addEventListener('click', () => this.loadDemoData());
+    document.getElementById('btnClearData')?.addEventListener('click', () => this.clearAllData());
+
+    // Sekmeler
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-tab');
+        if (tab) this.switchTab(tab);
+      });
+    });
+
+    // Tema Değiştirici
+    document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
+      const html = document.documentElement;
+      const nextTheme = html.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', nextTheme);
+      document.getElementById('themeToggleBtn').innerText = nextTheme === 'light' ? '🌙' : '☀️';
+    });
+  }
+}
+
+// Uygulamayı Başlat
+window.addEventListener('DOMContentLoaded', () => {
+  window.app = new AIMatchPulseApp();
+  window.app.init();
+});

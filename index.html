@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AI MatchPulse - Günün Maç Tahmini, AI Kıyaslama & Canlı Skor Liderliği</title>
+  
+  <!-- Meta & Favicon -->
+  <meta name="description" content="Farklı yapay zekalardan gelen maç tahminlerini akıllıca eşleştirin, canlı maç skorlarını takip edin ve AI başarı liderlik tablosunu görüntüleyin.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
+
+  <!-- Apple & Vercel Style CSS -->
+  <link rel="stylesheet" href="css/style.css">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- TOP HEADER -->
+    <header style="display: flex; flex-direction: column; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.25); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+            ⚽
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h1 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">AI MatchPulse</h1>
+              <span class="notion-tag tag-green">v3.0 Standalone</span>
+            </div>
+            <p style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
+              Günün Maç Tahmini Prompt Üreticisi, Çoklu AI Mukayese Tablosu & Canlı Skor Liderlik Konsolu
+            </p>
+          </div>
+        </div>
+
+        <!-- Hızlı İşlem Butonları -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="btnLoadDemo" class="notion-btn notion-btn-sm" title="Örnek Maç ve Tahmin Verilerini Yükle">
+            <span>🎲 Demo Veri Yükle</span>
+          </button>
+          <button id="btnClearData" class="notion-btn notion-btn-sm" style="color: var(--accent-red); border-color: rgba(239, 68, 68, 0.2);" title="Tüm Tabloyu Sıfırla">
+            <span>🗑️ Sıfırla</span>
+          </button>
+          <button id="themeToggleBtn" class="notion-btn notion-btn-sm" title="Temayı Değiştir (Açık/Koyu)">
+            ☀️
+          </button>
+        </div>
+      </div>
+
+      <!-- Menü Sekmeleri (SPA Navigasyonu) -->
+      <nav style="display: flex; align-items: center; gap: 6px; overflow-x: auto; padding-top: 4px;">
+        <button class="notion-btn tab-btn active notion-btn-primary notion-btn-sm" data-tab="all" id="tab-all">
+          <span>🏠</span> Tümü (Genel Bakış)
+        </button>
+        <button class="notion-btn tab-btn notion-btn-sm" data-tab="prompt" id="tab-prompt">
+          <span>✨</span> Günün Prompt Üreticisi
+        </button>
+        <button class="notion-btn tab-btn notion-btn-sm" data-tab="input" id="tab-input">
+          <span>⚡</span> Ham Metin Girişi
+        </button>
+        <button class="notion-btn tab-btn notion-btn-sm" data-tab="table" id="tab-table">
+          <span>📊</span> Canlı Skor & Mukayese Tablosu
+        </button>
+      </nav>
+    </header>
+
+    <!-- 1. GÜNÜN MAÇ TAHMİNİ PROMPT ÜRETİCİSİ -->
+    <section id="section-prompt" class="notion-card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="card-icon">✨</span>
+          <div>
+            <h3 class="card-title">Günün Maç Tahmini Prompt Üreticisi</h3>
+            <p class="card-desc">Günün gerçek tarihine göre optimize edilen ve yapay zekalardan standart çıktı alan prompt şablonu.</p>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="date" id="promptDateInput" class="notion-input" style="font-size: 12px; padding: 5px 10px;">
+          <span id="currentDateBadge" class="notion-tag tag-subtle" style="font-family: var(--font-mono); font-size: 11px;">
+            Yükleniyor...
+          </span>
+        </div>
+      </div>
+
+      <!-- Parametre Seçenekleri -->
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-secondary);">
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="optOdds" checked style="accent-color: var(--accent-green); cursor: pointer;">
+          <span>Oran & Trend Analizi</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="optSurprise" checked style="accent-color: var(--accent-green); cursor: pointer;">
+          <span>Sürpriz / Risk Tespiti</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="optScore" checked style="accent-color: var(--accent-green); cursor: pointer;">
+          <span>Net Skor & Güven Oranı %</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="optStandart" checked style="accent-color: var(--accent-green); cursor: pointer;">
+          <span>Standart Format Zorunluluğu</span>
+        </label>
+      </div>
+
+      <!-- Prompt Gösterim Kutusu -->
+      <div style="position: relative;">
+        <textarea id="promptTextArea" readonly rows="5" class="notion-textarea" style="font-size: 12px; resize: vertical;"></textarea>
+        
+        <button id="copyPromptBtn" class="notion-btn notion-btn-primary" style="position: absolute; bottom: 10px; right: 10px;">
+          <span>📋</span> <span id="copyBtnText">Promptu Kopyala</span>
+        </button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11.5px; color: var(--text-muted);">
+        <span>💡 Bu promptu ChatGPT, Claude, Gemini veya DeepSeek'e gönderin; yanıtı aşağıdaki kutudan sisteme ekleyin.</span>
+      </div>
+    </section>
+
+    <!-- 2. HAM METİN GİRİŞİ & AKILLI EŞLEŞTİRME -->
+    <section id="section-input" class="notion-card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <span class="card-icon">⚡</span>
+          <div>
+            <h3 class="card-title">Ham AI Tahmin Metni Girişi</h3>
+            <p class="card-desc">Yapay zekadan aldığınız yanıtı olduğu gibi yapıştırın; sistem maçları ve skorları otomatik ayrıştırır.</p>
+          </div>
+        </div>
+
+        <!-- AI Kaynak Seçimi -->
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="font-size: 12px; color: var(--text-muted);">Kaynak AI:</span>
+          <button type="button" class="notion-btn notion-btn-xs ai-btn active notion-btn-primary" data-ai="ChatGPT">ChatGPT</button>
+          <button type="button" class="notion-btn notion-btn-xs ai-btn" data-ai="Claude">Claude</button>
+          <button type="button" class="notion-btn notion-btn-xs ai-btn" data-ai="Gemini">Gemini</button>
+          <button type="button" class="notion-btn notion-btn-xs ai-btn" data-ai="DeepSeek">DeepSeek</button>
+          <button type="button" class="notion-btn notion-btn-xs ai-btn" data-ai="Grok">Grok</button>
+          <input type="text" id="customAIName" placeholder="Örn: Perplexity" class="notion-input" style="width: 90px; padding: 3px 6px; font-size: 11px;">
+        </div>
+      </div>
+
+      <textarea id="rawTextInput" rows="4" placeholder="Yapay zekadan gelen metni buraya yapıştırın...
+Örn:
+Real Madrid vs Barcelona: 2-1 (KG Var)
+Manchester City - Arsenal | Skor: 1-1
+Inter vs Juventus -> 2-0..." class="notion-textarea" style="font-size: 12px; resize: vertical; margin-bottom: 12px;"></textarea>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span id="parseStatusText" style="font-size: 12px; color: var(--text-muted);">
+          Format fark etmez; takım adları ve skorlar akıllıca eşleştirilir.
+        </span>
+        <button id="btnProcessRaw" class="notion-btn notion-btn-primary">
+          <span>⚡ Tahminleri Ekle & Kıyasla</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 3. YAN YANA MUKAYESE & CANLI SKOR TABLOSU -->
+    <section id="section-table" class="notion-card" style="padding: 0; overflow: hidden;">
+      
+      <!-- Tablo Araç Çubuğu -->
+      <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: var(--bg-secondary);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <h3 style="font-size: 15px; font-weight: 600;">Yan Yana Mukayese Tablosu</h3>
+          <span id="matchCountBadge" class="notion-tag tag-subtle" style="font-family: var(--font-mono); font-size: 11px;">
+            0 Maç Eşleşti
+          </span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <!-- 🔴 CANLI SKORLARI / SONUÇLARI ÇEK BUTONU -->
+          <button id="btnSyncScores" class="notion-btn notion-btn-live notion-btn-sm" title="Devam eden ve biten maçların skorlarını canlı çek">
+            <span class="pulse-live-dot"></span>
+            <span>⚡ Canlı Skorları / Sonuçları Çek</span>
+          </button>
+
+          <input type="text" id="tableSearch" placeholder="Maç veya takım ara..." class="notion-input" style="width: 150px; font-size: 12px; padding: 5px 8px;">
+          
+          <button id="btnCopyHtml" class="notion-btn notion-btn-sm" title="Tabloyu HTML olarak panoya kopyala">
+            <span>📋 Tablo HTML</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- AI BAŞARI LİDERLİK KARTI -->
+      <div id="leaderboardBar" class="leaderboard-card" style="display: none; border-radius: 0; border-left: none; border-right: none; margin-bottom: 0;">
+        <!-- JS tarafından doldurulacak -->
+      </div>
+
+      <!-- Tablo Konteyneri -->
+      <div class="notion-table-container" style="border: none; border-radius: 0;">
+        <table class="notion-table" id="comparisonTable">
+          <thead>
+            <tr id="tableHeaderRow">
+              <th style="width: 40px; text-align: center;">#</th>
+              <th style="min-width: 170px;">Maç / Karşılaşma</th>
+              <th style="text-align: center; color: var(--accent-red); min-width: 130px;">Canlı Skor & Durum</th>
+              <th style="text-align: center; color: var(--accent-green);">ChatGPT</th>
+              <th style="text-align: center; color: #818cf8;">Claude</th>
+              <th style="text-align: center; color: #60a5fa;">Gemini</th>
+              <th style="text-align: center; color: var(--accent-yellow);">Konsensüs / Trend</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr id="emptyRow">
+              <td colspan="7" style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                  <span style="font-size: 28px;">📋</span>
+                  <p style="font-size: 13.5px; font-weight: 500;">Henüz maç tahmini eklenmedi.</p>
+                  <p style="font-size: 12px; color: var(--text-muted);">
+                    Yukarıdaki promptu kopyalayıp AI yanıtlarını yapıştırın veya
+                    <button onclick="window.app.loadDemoData()" style="color: var(--accent-green); background: none; border: none; text-decoration: underline; cursor: pointer; font-weight: 600;">Demo Veri Yükleyin</button>.
+                  </p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tablo Alt Bilgi Çubuğu -->
+      <div style="padding: 10px 16px; border-top: 1px solid var(--border-color); background: var(--bg-secondary); font-size: 11.5px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span id="footerSummary">Sistem yeni yapay zekaları otomatik olarak yan yana sütunlara ekler.</span>
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--accent-green);"></span> 🎯 Tam İsabet (3P)</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: var(--accent-blue);"></span> ✓ Sonuç Bildi (1P)</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px;"><span class="pulse-live-dot"></span> Canlı Devam Eden Maç</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- YÜZEN BİLDİRİM (TOAST) -->
+  <div id="notion-toast" class="notion-toast"></div>
+
+  <!-- UYGULAMA MOTORU -->
+  <script src="js/app.js"></script>
+</body>
+</html>
