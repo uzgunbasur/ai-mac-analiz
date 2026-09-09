@@ -627,7 +627,7 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
           </button>
 
           <!-- 🔴 CANLI SKORLARI / SONUÇLARI ÇEK BUTONU (RESMİ CANLI VERİ) -->
-          <button id="btnSyncScores" class="notion-btn notion-btn-live notion-btn-sm" title="UEFA Şampiyonlar Ligi, Premier Lig, La Liga, Süper Lig vb. resmi canlı maç skorlarını ESPN üzerinden çeker">
+          <button id="btnSyncScores" onclick="window.app.syncLiveScores()" class="notion-btn notion-btn-live notion-btn-sm" title="UEFA Şampiyonlar Ligi, Premier Lig, La Liga, Süper Lig vb. resmi canlı maç skorlarını ESPN üzerinden çeker">
             <span class="pulse-live-dot"></span>
             <span>⚡ Canlı Skorları / Sonuçları Çek (Resmi Veri)</span>
           </button>
@@ -698,6 +698,6 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
   <div id="notion-toast" class="notion-toast"></div>
 
   <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
-  <script type="module" src="./js/app.js?v=4.1.0"></script>
+  <script type="module" src="./js/app.js?v=4.2.0"></script>
 </body>
 </html>

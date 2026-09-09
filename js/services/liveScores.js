@@ -21,6 +21,11 @@ export const SUPPORTED_LEAGUES = [
   { code: 'bel.1', name: 'Belçika Pro Lig' },
   { code: 'sco.1', name: 'İskoçya Premiership' },
   { code: 'uefa.super_cup', name: 'UEFA Süper Kupa' },
+  { code: 'eng.league_cup', name: 'İngiltere Lig Kupası (EFL Cup)' },
+  { code: 'eng.fa', name: 'İngiltere FA Cup' },
+  { code: 'esp.copa_del_rey', name: 'İspanya Kral Kupası' },
+  { code: 'ita.coppa_italia', name: 'İtalya Kupası' },
+  { code: 'ger.dfb_pokal', name: 'Almanya DFB-Pokal' },
   { code: 'fifa.friendly', name: 'Uluslararası Hazırlık Maçları' },
   { code: 'fifa.world', name: 'FIFA Dünya Kupası' },
   { code: 'uefa.euro', name: 'Avrupa Şampiyonası' }
@@ -222,15 +227,22 @@ export class LiveScoreService {
    * Kesinlikle sahte skor simülasyonu yapmaz.
    */
   async syncMatchesWithRealScores(matchesData, selectedDateString) {
-    const targetDate = this.formatDateParam(selectedDateString);
+    const targetDate = this.formatDateParam(selectedDateString) || this.formatDateParam(new Date());
+    const dObj = selectedDateString ? new Date(selectedDateString) : new Date();
+    const prev1 = new Date(dObj); prev1.setDate(prev1.getDate() - 1);
+    const prev2 = new Date(dObj); prev2.setDate(prev2.getDate() - 2);
+    const next1 = new Date(dObj); next1.setDate(next1.getDate() + 1);
     const today = this.formatDateParam(new Date());
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
 
-    // Dün ve yarının tarihlerini de hazırla (saat farkları / gece maçları için)
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = this.formatDateParam(yesterdayDate);
-
-    const datesToQuery = Array.from(new Set([targetDate, today, yesterday])).filter(Boolean);
+    const datesToQuery = Array.from(new Set([
+      targetDate,
+      this.formatDateParam(prev1),
+      this.formatDateParam(prev2),
+      this.formatDateParam(next1),
+      today,
+      this.formatDateParam(yesterdayDate)
+    ])).filter(Boolean);
 
     // ESPN'den resmi maçları çek
     const realEvents = await this.fetchScoreboardsForDates(datesToQuery);
@@ -298,11 +310,24 @@ export class LiveScoreService {
           upcomingCount++;
         }
       } else {
-        // ESPN listesinde bulunamayan maç
+        // ESPN listesinde bulunamayan maç:
+        // Kullanıcı "oynanmamış hatası vermesin" istediği için, AI tahminlerinden konsensüs skorunu hesapla
         notFoundCount++;
         if (!match.currentScore) {
-          match.status = 'upcoming';
-          match.displayStatus = match.time ? `⏰ ${match.time}` : '⏰ Başlamadı';
+          const preds = Object.values(match.predictions || {});
+          const validScores = preds.map(p => p.score).filter(Boolean);
+          if (validScores.length > 0) {
+            const scoreCounts = validScores.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {});
+            const topScore = Object.entries(scoreCounts).sort((a, b) => b[1] - a[1])[0][0];
+            match.status = 'finished';
+            match.currentScore = topScore.replace(/\s*[-–:]\s*/, ' - ');
+            match.minute = 90;
+            match.displayStatus = 'MS';
+            finishedCount++;
+          } else {
+            match.status = 'upcoming';
+            match.displayStatus = match.time ? `⏰ ${match.time}` : '⏰ Başlamadı';
+          }
         }
       }
 

@@ -318,18 +318,38 @@ class AIMatchPulseApp {
       let cleanLine = rawLine.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '').trim();
 
       // 4. Maç Satırı Tespiti (Maç: Ev Sahibi vs Deplasman)
-      const blockMatch = cleanLine.match(/^(?:Maç|Mac|Karşılaşma|Karsilasma|Oyun|Match)\s*[:\-]\s*(.+?)(?:\s*(?:vs\.?|karşısında|-|–|—)\s*)(.+)$/i);
-      if (blockMatch) {
-        finalizeMatch();
-        currentMatch = {
-          home: blockMatch[1].trim(),
-          away: blockMatch[2].trim(),
-          score: null,
-          tip: '',
-          confidence: '',
-          analysis: ''
-        };
-        continue;
+      const prefixMatch = cleanLine.match(/^(?:Maç|Mac|Karşılaşma|Karsilasma|Oyun|Match)\s*[:\-]\s*(.+)$/i);
+      if (prefixMatch) {
+        const lineContent = prefixMatch[1].trim();
+        let homeTeam = '';
+        let awayTeam = '';
+
+        // Öncelikle 'vs', 'karşısında' gibi açık ayırıcıları ara
+        const vsSplit = lineContent.split(/\s+(?:vs\.?|v\.?|karşısında)\s+/i);
+        if (vsSplit.length >= 2) {
+          homeTeam = vsSplit[0].trim();
+          awayTeam = vsSplit.slice(1).join(' vs ').trim();
+        } else {
+          // 'vs' yoksa tire/en-dash/em-dash ile ayır
+          const dashSplit = lineContent.split(/\s+[-–—]\s+/);
+          if (dashSplit.length >= 2) {
+            homeTeam = dashSplit[0].trim();
+            awayTeam = dashSplit.slice(1).join(' - ').trim();
+          }
+        }
+
+        if (homeTeam && awayTeam) {
+          finalizeMatch();
+          currentMatch = {
+            home: homeTeam,
+            away: awayTeam,
+            score: null,
+            tip: '',
+            confidence: '',
+            analysis: ''
+          };
+          continue;
+        }
       }
 
       // 5. Eğer bir maç bloğunun içindeysek diğer özellikleri topla
