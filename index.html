@@ -9,13 +9,438 @@
   <meta name="description" content="Farklı yapay zekalardan gelen maç tahminlerini akıllıca eşleştirin, canlı maç skorlarını takip edin ve AI başarı liderlik tablosunu görüntüleyin.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 
-  <!-- Apple & Vercel Style CSS -->
-  <link rel="stylesheet" href="css/style.css">
-  
-  <!-- Fonts -->
+  <!-- Göreceli CSS Yolu (Subfolder ve Local Uyumlu) -->
+  <link rel="stylesheet" href="./css/style.css">
+
+  <!-- Fonts (Google Fonts CDN) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- ====================================================================
+       GÖMÜLÜ FAIL-SAFE CSS (GITHUB PAGES ALT DİZİNİNDE 404 KORUMASI)
+       ==================================================================== -->
+  <style>
+    :root {
+      --bg-primary: #09090b;
+      --bg-secondary: #121215;
+      --bg-card: #18181b;
+      --bg-card-hover: #222226;
+      --bg-input: #0f0f12;
+
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.2);
+      --border-subtle: rgba(255, 255, 255, 0.04);
+
+      --text-primary: #f4f4f5;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+
+      --accent-green: #10b981;
+      --accent-green-bg: rgba(16, 185, 129, 0.12);
+      --accent-blue: #3b82f6;
+      --accent-blue-bg: rgba(59, 130, 246, 0.12);
+      --accent-red: #ef4444;
+      --accent-red-bg: rgba(239, 68, 68, 0.12);
+      --accent-yellow: #f59e0b;
+      --accent-yellow-bg: rgba(245, 158, 11, 0.12);
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-pill: 9999px;
+
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+
+    [data-theme="light"] {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #f1f5f9;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f8fafc;
+      --bg-input: #ffffff;
+
+      --border-color: rgba(0, 0, 0, 0.08);
+      --border-hover: rgba(0, 0, 0, 0.18);
+      --border-subtle: rgba(0, 0, 0, 0.04);
+
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #94a3b8;
+
+      --accent-green: #059669;
+      --accent-green-bg: rgba(5, 150, 105, 0.1);
+      --accent-blue: #2563eb;
+      --accent-blue-bg: rgba(37, 99, 235, 0.1);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    @media (min-width: 768px) {
+      body {
+        padding: 40px 24px;
+      }
+    }
+
+    .app-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .notion-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 22px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .notion-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-icon {
+      font-size: 18px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .card-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .notion-input, .notion-textarea {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      outline: none;
+    }
+
+    .notion-input:focus, .notion-textarea:focus {
+      border-color: var(--accent-green);
+      box-shadow: 0 0 0 1px var(--accent-green);
+    }
+
+    .notion-textarea {
+      width: 100%;
+      font-family: var(--font-mono);
+      line-height: 1.6;
+    }
+
+    .notion-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .notion-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+    }
+
+    .notion-btn:active {
+      transform: scale(0.97);
+    }
+
+    .notion-btn-primary {
+      background: #ededed;
+      color: #09090b;
+      font-weight: 600;
+      border-color: #ededed;
+    }
+
+    .notion-btn-primary:hover {
+      background: #ffffff;
+      border-color: #ffffff;
+    }
+
+    .notion-btn-live {
+      background: #dc2626;
+      border-color: #ef4444;
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .notion-btn-live:hover {
+      background: #b91c1c;
+    }
+
+    .notion-btn-sm {
+      padding: 5px 10px;
+      font-size: 11.5px;
+    }
+
+    .notion-btn-xs {
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+
+    .notion-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    .tag-green {
+      background: var(--accent-green-bg);
+      color: var(--accent-green);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+
+    .tag-blue {
+      background: var(--accent-blue-bg);
+      color: var(--accent-blue);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+    }
+
+    .tag-yellow {
+      background: var(--accent-yellow-bg);
+      color: var(--accent-yellow);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+
+    .tag-red {
+      background: var(--accent-red-bg);
+      color: var(--accent-red);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+
+    .tag-subtle {
+      background: var(--bg-secondary);
+      color: var(--text-muted);
+      border: 1px solid var(--border-color);
+    }
+
+    .glow-emerald {
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+      border-color: var(--accent-green) !important;
+    }
+
+    .pulse-live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      animation: pulseLive 1.4s infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    @keyframes pulseLive {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+      }
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+      }
+    }
+
+    .live-score-cell {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      min-width: 110px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .live-score-cell:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-card-hover);
+      transform: translateY(-1px);
+    }
+
+    .leaderboard-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      margin-bottom: 14px;
+    }
+
+    .ai-rank-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-card);
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-color);
+      font-size: 12px;
+    }
+
+    .ai-rank-pill .rank-num {
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .ai-rank-pill .rank-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .ai-rank-pill .rank-pts {
+      color: var(--accent-green);
+      font-weight: 700;
+    }
+
+    .notion-table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: var(--bg-card);
+    }
+
+    .notion-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      text-align: left;
+    }
+
+    .notion-table th {
+      background: var(--bg-secondary);
+      padding: 12px 14px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-subtle);
+    }
+
+    .notion-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      border-right: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+
+    .notion-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .notion-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #18181b;
+      border: 1px solid var(--accent-green);
+      color: #ffffff;
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 9999;
+    }
+
+    .notion-toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(120, 120, 120, 0.3);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(120, 120, 120, 0.5);
+    }
+  </style>
 </head>
 <body>
 
@@ -31,7 +456,7 @@
           <div>
             <div style="display: flex; align-items: center; gap: 8px;">
               <h1 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">AI MatchPulse</h1>
-              <span class="notion-tag tag-green">v3.0 Standalone</span>
+              <span class="notion-tag tag-green">v3.0 Canlı</span>
             </div>
             <p style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
               Günün Maç Tahmini Prompt Üreticisi, Çoklu AI Mukayese Tablosu & Canlı Skor Liderlik Konsolu
@@ -240,7 +665,7 @@ Inter vs Juventus -> 2-0..." class="notion-textarea" style="font-size: 12px; res
   <!-- YÜZEN BİLDİRİM (TOAST) -->
   <div id="notion-toast" class="notion-toast"></div>
 
-  <!-- UYGULAMA MOTORU -->
-  <script src="js/app.js"></script>
+  <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
+  <script src="./js/app.js"></script>
 </body>
 </html>
