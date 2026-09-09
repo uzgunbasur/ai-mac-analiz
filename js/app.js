@@ -609,7 +609,12 @@ class AIMatchPulseApp {
     if (keys.length === 0) {
       if (headerRow) {
         headerRow.innerHTML = `
-          <th style="width: 40px; text-align: center;">#</th>
+          <th style="width: 65px; text-align: center;">
+            <div style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+              <input type="checkbox" id="selectAllMatches" disabled style="opacity: 0.5;">
+              <span style="font-size: 11px; color: var(--text-muted);">Seç</span>
+            </div>
+          </th>
           <th style="min-width: 170px;">Maç / Karşılaşma</th>
           <th style="text-align: center; color: var(--accent-red); min-width: 130px;">Canlı Skor & Durum</th>
           <th style="text-align: center; color: var(--accent-green);">ChatGPT</th>
@@ -621,7 +626,7 @@ class AIMatchPulseApp {
       if (tbody) {
         tbody.innerHTML = `
           <tr id="emptyRow">
-            <td colspan="7" style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
+            <td colspan="8" style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
               <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
                 <span style="font-size: 28px;">📋</span>
                 <p style="font-size: 13.5px; font-weight: 500;">Henüz maç tahmini eklenmedi.</p>
@@ -634,13 +639,19 @@ class AIMatchPulseApp {
           </tr>
         `;
       }
+      this.updateSelectedCount();
       return;
     }
 
     // Dynamic Headers
     if (headerRow) {
       let hHtml = `
-        <th style="width: 40px; text-align: center;">#</th>
+        <th style="width: 65px; text-align: center;">
+          <div style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+            <input type="checkbox" id="selectAllMatches" title="Tümünü Seç / Bırak" style="accent-color: var(--accent-green); cursor: pointer; width: 14px; height: 14px;">
+            <span style="font-size: 11px; color: var(--text-muted);">Seç</span>
+          </div>
+        </th>
         <th style="min-width: 170px;">Maç / Karşılaşma</th>
         <th style="text-align: center; color: var(--accent-red); min-width: 130px;">Canlı Skor & Durum</th>
       `;
@@ -703,7 +714,14 @@ class AIMatchPulseApp {
 
         rHtml += `
           <tr class="ma-row" data-match="${match.displayName.toLowerCase()}">
-            <td style="text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px;">${index + 1}</td>
+            <td style="text-align: center; width: 65px; padding: 6px 4px;">
+              <div style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                <input type="checkbox" class="match-select-chk" data-key="${key}" style="accent-color: var(--accent-green); cursor: pointer; width: 14px; height: 14px;" title="Bu maçı seç">
+                <button type="button" onclick="window.app.deleteMatch('${key}')" class="notion-btn-xs" style="background: none; border: none; cursor: pointer; padding: 2px 4px; border-radius: 4px; color: var(--accent-red); font-size: 12px; opacity: 0.7; transition: all 0.15s ease;" onmouseover="this.style.opacity='1'; this.style.background='rgba(239, 68, 68, 0.18)';" onmouseout="this.style.opacity='0.7'; this.style.background='none';" title="'${match.displayName}' maçını sil">
+                  🗑️
+                </button>
+              </div>
+            </td>
             <td style="font-weight: 600; color: var(--text-primary);">
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green);"></span>
@@ -764,6 +782,7 @@ class AIMatchPulseApp {
       });
 
       tbody.innerHTML = rHtml;
+      this.updateSelectedCount();
     }
   }
 
@@ -799,25 +818,91 @@ class AIMatchPulseApp {
     }
   }
 
-  filterTable(q) {
-    const query = q.toLowerCase().trim();
-    document.querySelectorAll('.ma-row').forEach(row => {
-      const text = row.getAttribute('data-match') || '';
-      row.style.display = text.includes(query) ? '' : 'none';
+  deleteMatch(key) {
+    const match = this.matchesData[key];
+    if (!match) return;
+    const name = match.displayName || key;
+    if (confirm(`"${name}" karşılaşmasını tablodan silmek istediğinize emin misiniz?`)) {
+      delete this.matchesData[key];
+      this.saveStorage();
+      this.renderTable();
+      this.showToast('Maç Silindi 🗑️', `"${name}" tablodan kaldırıldı.`);
+    }
+  }
+
+  deleteSelectedMatches() {
+    const checkedBoxes = document.querySelectorAll('.match-select-chk:checked');
+    const keysToDelete = Array.from(checkedBoxes).map(cb => cb.dataset.key).filter(Boolean);
+    if (keysToDelete.length === 0) return;
+
+    if (confirm(`İşaretlenen ${keysToDelete.length} maçı tablodan silmek istediğinize emin misiniz?`)) {
+      keysToDelete.forEach(k => {
+        delete this.matchesData[k];
+      });
+      this.saveStorage();
+      this.renderTable();
+      this.showToast('Seçilenler Silindi 🗑️', `${keysToDelete.length} maç tablodan temizlendi.`);
+    }
+  }
+
+  toggleSelectAll(checked) {
+    document.querySelectorAll('.match-select-chk').forEach(cb => {
+      cb.checked = checked;
     });
+    this.updateSelectedCount();
+  }
+
+  updateSelectedCount() {
+    const checkedBoxes = document.querySelectorAll('.match-select-chk:checked');
+    const count = checkedBoxes.length;
+    const delBtn = document.getElementById('btnDeleteSelected');
+    const countSpan = document.getElementById('selectedCount');
+    const allBox = document.getElementById('selectAllMatches');
+
+    if (countSpan) countSpan.innerText = count;
+    if (delBtn) {
+      delBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+
+    const totalBoxes = document.querySelectorAll('.match-select-chk');
+    if (allBox && totalBoxes.length > 0) {
+      allBox.checked = count === totalBoxes.length;
+      allBox.indeterminate = count > 0 && count < totalBoxes.length;
+    } else if (allBox) {
+      allBox.checked = false;
+      allBox.indeterminate = false;
+    }
   }
 
   copyHtmlTable() {
     const table = document.getElementById('comparisonTable');
     if (!table) return;
 
+    const clone = table.cloneNode(true);
+    // Export edilen HTML'de buton ve checkbox yerine temiz sıra numarası # koy
+    const thFirst = clone.querySelector('th:first-child');
+    if (thFirst) {
+      thFirst.innerHTML = '#';
+      thFirst.style.width = '35px';
+    }
+    let rowIndex = 1;
+    clone.querySelectorAll('tbody tr').forEach(row => {
+      if (row.id === 'emptyRow') return;
+      const tdFirst = row.querySelector('td:first-child');
+      if (tdFirst) {
+        tdFirst.innerHTML = String(rowIndex++);
+        tdFirst.style.width = '35px';
+        tdFirst.style.textAlign = 'center';
+      }
+    });
+
     const cleanHtml = `
 <table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse:collapse; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size:13px; text-align:left; background:#0d0d0d; color:#ededed; border:1px solid rgba(255,255,255,0.1);">
-  ${table.innerHTML}
+  ${clone.innerHTML}
 </table>`.trim();
 
     navigator.clipboard.writeText(cleanHtml).then(() => {
-      this.showToast('HTML Kopyalandı! 📋', 'Notion / Vercel uyumlu tablo panoda.');
+      this.showToast('HTML Kopyalandı! 📋', 'Notion / Vercel uyumlu temiz tablo panoda.');
     });
   }
 
@@ -984,6 +1069,16 @@ class AIMatchPulseApp {
 
     // HTML Kopyala
     document.getElementById('btnCopyHtml')?.addEventListener('click', () => this.copyHtmlTable());
+
+    // Seçilenleri Sil & Satır Seçimleri
+    document.getElementById('btnDeleteSelected')?.addEventListener('click', () => this.deleteSelectedMatches());
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'selectAllMatches') {
+        this.toggleSelectAll(e.target.checked);
+      } else if (e.target && e.target.classList.contains('match-select-chk')) {
+        this.updateSelectedCount();
+      }
+    });
 
     // Demo & Sıfırla
     document.getElementById('btnLoadDemo')?.addEventListener('click', () => this.loadDemoData());
