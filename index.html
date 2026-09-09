@@ -10,7 +10,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 
   <!-- Göreceli CSS Yolu (Subfolder ve Local Uyumlu) -->
-  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/style.css?v=3.5.0">
 
   <!-- Fonts (Google Fonts CDN) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -612,8 +612,8 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
         </div>
 
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <!-- 🗑️ SEÇİLENLERİ SİL BUTONU -->
-          <button id="btnDeleteSelected" class="notion-btn notion-btn-sm" style="display: none; color: var(--accent-red); border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.1); font-weight: 600;" title="İşaretlenen maçları tablodan kaldır">
+          <!-- 🗑️ SEÇİLENLERİ SİL BUTONU (HER ZAMAN GÖRÜNÜR) -->
+          <button id="btnDeleteSelected" class="notion-btn notion-btn-sm" style="color: var(--accent-red); border-color: rgba(239, 68, 68, 0.25); background: rgba(239, 68, 68, 0.08); font-weight: 600; opacity: 0.5; pointer-events: none;" disabled title="Sol kutulardan seçtiğiniz maçları silmek için kullanın">
             <span>🗑️ Seçilenleri Sil (<span id="selectedCount">0</span>)</span>
           </button>
 
@@ -689,6 +689,6 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
   <div id="notion-toast" class="notion-toast"></div>
 
   <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
-  <script src="./js/app.js"></script>
+  <script src="./js/app.js?v=3.5.0"></script>
 </body>
 </html>

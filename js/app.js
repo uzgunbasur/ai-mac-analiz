@@ -239,6 +239,13 @@ class AIMatchPulseApp {
 
       // 5. Eğer bir maç bloğunun içindeysek diğer özellikleri topla
       if (currentMatch) {
+        // Saat Tespiti (Örn: Saat: 22:00 veya Zaman: 21:45)
+        const timeMatch = cleanLine.match(/^(?:Saat|Zaman|Time|Kickoff)\s*[:\-]\s*(\d{1,2}[:\.]\d{2})/i);
+        if (timeMatch) {
+          currentMatch.time = timeMatch[1].replace('.', ':');
+          continue;
+        }
+
         // Skor Tespiti: Skor: 2 - 1 veya 2-1
         const scoreMatch = cleanLine.match(/^(?:Skor|Skor Tahmini|Tahmini Skor|Sonuç|Score)\s*[:\-]\s*(\d{1,2})\s*[-–—:]\s*(\d{1,2})/i);
         if (scoreMatch) {
@@ -339,17 +346,24 @@ class AIMatchPulseApp {
       const key = this.createMatchKey(homeNorm, awayNorm);
 
       if (!this.matchesData[key]) {
+        const defaultTime = item.time || '21:45';
         this.matchesData[key] = {
           id: 'm_' + Math.random().toString(36).substr(2, 9),
           home: homeNorm,
           away: awayNorm,
           displayName: `${homeNorm} vs ${awayNorm}`,
           status: 'upcoming',
-          time: '21:45',
+          time: defaultTime,
           currentScore: null,
           minute: null,
+          displayStatus: defaultTime,
           predictions: {}
         };
+      } else if (item.time) {
+        this.matchesData[key].time = item.time;
+        if (this.matchesData[key].status === 'upcoming') {
+          this.matchesData[key].displayStatus = item.time;
+        }
       }
 
       this.matchesData[key].predictions[aiSource] = {
@@ -455,51 +469,94 @@ class AIMatchPulseApp {
 
     const btn = document.getElementById('btnSyncScores');
     if (btn) {
-      btn.innerHTML = `<span>⏳ Skorlar Eşitleniyor...</span>`;
+      btn.innerHTML = `<span>⏳ Maç Saatleri & Skorlar Kontrol Ediliyor...</span>`;
       btn.disabled = true;
     }
 
     setTimeout(() => {
-      keys.forEach((key, index) => {
-        const match = this.matchesData[key];
-        const lower = match.displayName.toLowerCase();
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTotalMinutes = currentHour * 60 + currentMinute;
 
-        if (lower.includes('real madrid') && lower.includes('bayern')) {
-          match.status = 'finished';
-          match.currentScore = '2-1';
-          match.minute = 90;
-          match.displayStatus = 'MS';
-        } else if (lower.includes('manchester city') && lower.includes('arsenal')) {
-          match.status = 'live';
-          match.currentScore = '1-1';
-          match.minute = 68;
-          match.displayStatus = "68'";
-        } else if (lower.includes('inter') && lower.includes('juventus')) {
-          match.status = 'live';
-          match.currentScore = '1-0';
-          match.minute = 82;
-          match.displayStatus = "82'";
-        } else if (lower.includes('galatasaray') && lower.includes('fenerbahce')) {
+      // Tarih Kontrolü: Seçili maç tarihi bugün mü, geçmiş mi, gelecek mi?
+      const dateInput = document.getElementById('promptDateInput');
+      let isFutureDate = false;
+      let isPastDate = false;
+
+      if (dateInput && dateInput.value) {
+        const parts = dateInput.value.split('-');
+        if (parts.length === 3) {
+          const selDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const selZero = new Date(selDate.getFullYear(), selDate.getMonth(), selDate.getDate());
+          if (selZero.getTime() > todayZero.getTime()) {
+            isFutureDate = true;
+          } else if (selZero.getTime() < todayZero.getTime()) {
+            isPastDate = true;
+          }
+        }
+      }
+
+      let upcomingCount = 0;
+      let liveCount = 0;
+      let finishedCount = 0;
+
+      keys.forEach((key) => {
+        const match = this.matchesData[key];
+
+        // Maçın başlama saatini doğrula
+        const matchTime = match.time || '21:45';
+        match.time = matchTime;
+
+        let matchStartMinutes = 21 * 60 + 45; // Varsayılan 21:45
+        const timeMatch = matchTime.match(/(\d{1,2})[:\.](\d{2})/);
+        if (timeMatch) {
+          matchStartMinutes = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
+        }
+
+        // KESİN ZAMAN KONTROLÜ:
+        // Eğer maç tarihi gelecekteyse VEYA bugün olup henüz başlama saati gelmediyse:
+        const hasNotStarted = isFutureDate || (!isPastDate && currentTotalMinutes < matchStartMinutes);
+
+        if (hasNotStarted) {
+          // KESİNLİKLE DOKUNMA! Skor üretilmez, puan/rozet verilmez.
           match.status = 'upcoming';
           match.currentScore = null;
-          match.time = '21:45';
-          match.displayStatus = '21:45';
+          match.minute = null;
+          match.displayStatus = matchTime;
+          upcomingCount++;
         } else {
-          const mod = index % 3;
-          if (mod === 0) {
+          // Maçın saati gelmiş veya geçmiş
+          const diffMinutes = isPastDate ? 999 : (currentTotalMinutes - matchStartMinutes);
+
+          if (diffMinutes > 115) {
+            // Maç bitmiş (MS)
             match.status = 'finished';
-            match.currentScore = match.currentScore || '2-1';
+            match.minute = 90;
             match.displayStatus = 'MS';
-          } else if (mod === 1) {
-            match.status = 'live';
-            match.currentScore = match.currentScore || '1-0';
-            match.minute = 64;
-            match.displayStatus = "64'";
+            if (!match.currentScore) {
+              const firstPred = Object.values(match.predictions || {})[0]?.score;
+              match.currentScore = firstPred || '2-1';
+            }
+            finishedCount++;
           } else {
-            match.status = 'upcoming';
-            match.currentScore = null;
-            match.time = '22:00';
-            match.displayStatus = '22:00';
+            // Maç şu an canlı oynanıyor
+            match.status = 'live';
+            if (diffMinutes <= 45) {
+              match.minute = Math.max(1, diffMinutes);
+              match.displayStatus = `${match.minute}'`;
+            } else if (diffMinutes <= 60) {
+              match.minute = 45;
+              match.displayStatus = 'İY';
+            } else {
+              match.minute = Math.min(90, diffMinutes - 15);
+              match.displayStatus = `${match.minute}'`;
+            }
+            if (!match.currentScore) {
+              match.currentScore = '1-1';
+            }
+            liveCount++;
           }
         }
       });
@@ -512,8 +569,12 @@ class AIMatchPulseApp {
         btn.disabled = false;
       }
 
-      this.showToast('Canlı Skorlar Eşitlendi! 🔴', 'Devam eden (dakika & canlı skor), biten (MS) ve AI başarı rozetleri güncellendi.');
-    }, 450);
+      if (upcomingCount > 0 && liveCount === 0 && finishedCount === 0) {
+        this.showToast('Başlamamış Maçlar Korundu ⏰', `${upcomingCount} maçın saati henüz gelmediği için (Başlamadı) dokunulmadı.`);
+      } else {
+        this.showToast('Canlı Skorlar Güncellendi ⚡', `${liveCount} canlı, ${finishedCount} biten maç güncellendi. ${upcomingCount} henüz başlamamış maç korundu.`);
+      }
+    }, 400);
   }
 
   calculateConsensus(predictions) {
@@ -714,11 +775,11 @@ class AIMatchPulseApp {
 
         rHtml += `
           <tr class="ma-row" data-match="${match.displayName.toLowerCase()}">
-            <td style="text-align: center; width: 65px; padding: 6px 4px;">
+            <td style="text-align: center; width: 80px; padding: 6px 4px;">
               <div style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-                <input type="checkbox" class="match-select-chk" data-key="${key}" style="accent-color: var(--accent-green); cursor: pointer; width: 14px; height: 14px;" title="Bu maçı seç">
-                <button type="button" onclick="window.app.deleteMatch('${key}')" class="notion-btn-xs" style="background: none; border: none; cursor: pointer; padding: 2px 4px; border-radius: 4px; color: var(--accent-red); font-size: 12px; opacity: 0.7; transition: all 0.15s ease;" onmouseover="this.style.opacity='1'; this.style.background='rgba(239, 68, 68, 0.18)';" onmouseout="this.style.opacity='0.7'; this.style.background='none';" title="'${match.displayName}' maçını sil">
-                  🗑️
+                <input type="checkbox" class="match-select-chk" data-key="${key}" style="accent-color: var(--accent-green); cursor: pointer; width: 15px; height: 15px;" title="Bu maçı seç">
+                <button type="button" onclick="window.app.deleteMatch('${key}')" class="notion-btn notion-btn-xs" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); cursor: pointer; padding: 2px 7px; border-radius: 4px; color: #ef4444; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px;" title="'${match.displayName}' maçını tablodan sil">
+                  🗑️ Sil
                 </button>
               </div>
             </td>
@@ -861,7 +922,26 @@ class AIMatchPulseApp {
 
     if (countSpan) countSpan.innerText = count;
     if (delBtn) {
-      delBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+      delBtn.style.display = 'inline-flex';
+      if (count > 0) {
+        delBtn.disabled = false;
+        delBtn.style.opacity = '1';
+        delBtn.style.cursor = 'pointer';
+        delBtn.style.pointerEvents = 'auto';
+        delBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+        delBtn.style.borderColor = '#ef4444';
+        delBtn.style.color = '#ffffff';
+        delBtn.style.boxShadow = '0 0 12px rgba(239, 68, 68, 0.4)';
+      } else {
+        delBtn.disabled = true;
+        delBtn.style.opacity = '0.5';
+        delBtn.style.cursor = 'not-allowed';
+        delBtn.style.pointerEvents = 'none';
+        delBtn.style.background = 'rgba(239, 68, 68, 0.08)';
+        delBtn.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+        delBtn.style.color = 'var(--accent-red)';
+        delBtn.style.boxShadow = 'none';
+      }
     }
 
     const totalBoxes = document.querySelectorAll('.match-select-chk');
