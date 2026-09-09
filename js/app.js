@@ -1,7 +1,9 @@
 /**
  * AI MatchPulse - Ana Uygulama Koordinatörü & SPA Motoru
- * Bağımsız, zero-dependency, ultra hızlı istemci motoru.
+ * Cloud Firestore Gerçek Zamanlı Bulut Senkronizasyonu & Çift Yönlü İstemci Motoru.
  */
+
+import { firebaseService } from './services/firebase.js';
 
 class AIMatchPulseApp {
   constructor() {
@@ -10,13 +12,105 @@ class AIMatchPulseApp {
     this.storageKey = 'aimatchpulse_matches_data';
     this.matchesData = this.loadStorage();
     this.currentTab = 'all';
+    this.isCloudConnected = false;
+    window.app = this;
   }
 
   init() {
     this.setupDateAndPrompt();
     this.setupEventListeners();
     this.renderTable();
-    console.log('AI MatchPulse başarıyla yüklendi.');
+    this.initFirebaseSync();
+    console.log('AI MatchPulse (v4.0 Bulut) başarıyla yüklendi.');
+  }
+
+  /**
+   * Firebase Cloud Firestore Gerçek Zamanlı Eşitleme (onSnapshot)
+   */
+  initFirebaseSync() {
+    firebaseService.onConnectionChange((isOnline, error) => {
+      this.isCloudConnected = isOnline;
+      this.updateCloudBadge(isOnline, error);
+    });
+
+    const initialized = firebaseService.init();
+    if (initialized) {
+      // 1. Gerçek Zamanlı Maç ve Skor Dinleyicisi
+      firebaseService.subscribeToMatches((cloudMatches) => {
+        const cloudCount = Object.keys(cloudMatches || {}).length;
+        const localCount = Object.keys(this.matchesData || {}).length;
+
+        if (cloudCount > 0) {
+          // Bulutta maçlar var -> doğrudan buluttaki ortak gerçeğe senkronize ol
+          this.matchesData = cloudMatches;
+          this.refreshAvailableAIsFromMatches();
+          this.saveStorage();
+          this.renderTable();
+          console.log(`☁️ Buluttan ${cloudCount} maç gerçek zamanlı güncellendi.`);
+        } else if (localCount > 0) {
+          // Bulut henüz boş fakat yerel hafızada veri var -> yereldeki verileri ilk kez buluta aktar
+          console.log(`☁️ Yereldeki ${localCount} maç ilk kez buluta yükleniyor...`);
+          firebaseService.saveMatchesBatch(this.matchesData);
+          firebaseService.saveAvailableAIs(this.availableAIs);
+        } else {
+          this.matchesData = {};
+          this.saveStorage();
+          this.renderTable();
+        }
+      }, (err) => {
+        console.warn('Bulut senkronizasyon dinleyicisi uyarısı:', err);
+      });
+
+      // 2. Yapay Zeka Kaynakları ve Ayar Dinleyicisi
+      firebaseService.subscribeToConfig((config) => {
+        if (config && Array.isArray(config.availableAIs) && config.availableAIs.length > 0) {
+          let hasNew = false;
+          config.availableAIs.forEach(ai => {
+            if (!this.availableAIs.includes(ai)) {
+              this.availableAIs.push(ai);
+              hasNew = true;
+            }
+          });
+          if (hasNew) this.renderTable();
+        }
+      });
+    }
+  }
+
+  /**
+   * Maçlardaki tüm AI kaynaklarını otomatik keşfet ve listeye ekle
+   */
+  refreshAvailableAIsFromMatches() {
+    Object.values(this.matchesData).forEach(m => {
+      if (m && m.predictions) {
+        Object.keys(m.predictions).forEach(ai => {
+          if (!this.availableAIs.includes(ai)) {
+            this.availableAIs.push(ai);
+          }
+        });
+      }
+    });
+  }
+
+  /**
+   * Header'daki Bulut Bağlantı Rozetini Güncelle
+   */
+  updateCloudBadge(isOnline, error) {
+    const statusEl = document.getElementById('cloudSyncStatus');
+    if (!statusEl) return;
+    if (isOnline) {
+      statusEl.innerHTML = `
+        <span class="pulse-live-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+        <span style="color: var(--accent-green); font-weight: 600;">Canlı Bulut Senkronizasyonu Aktif</span>
+      `;
+      statusEl.title = 'Google Cloud Firestore bağlı. Tüm değişiklikler eşzamanlı olarak diğer kullanıcılara yansır.';
+    } else {
+      statusEl.innerHTML = `
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; display: inline-block;"></span>
+        <span style="color: var(--accent-yellow); font-weight: 600;">Yerel Mod (Çevrimdışı)</span>
+      `;
+      statusEl.title = error || 'Bulut bağlantısı sağlanamadı. Değişiklikler tarayıcıda saklanıyor.';
+    }
   }
 
   loadStorage() {
@@ -377,10 +471,23 @@ class AIMatchPulseApp {
     this.saveStorage();
     if (rawInput) rawInput.value = '';
 
+    // Bulut Senkronizasyonu: Yeni eklenen/güncellenen maçları Firestore'a aktar
+    const cloudBatch = {};
+    parsed.forEach(item => {
+      const homeNorm = this.normalizeTeamName(item.home);
+      const awayNorm = this.normalizeTeamName(item.away);
+      const key = this.createMatchKey(homeNorm, awayNorm);
+      if (this.matchesData[key]) {
+        cloudBatch[key] = this.matchesData[key];
+      }
+    });
+    firebaseService.saveMatchesBatch(cloudBatch);
+    firebaseService.saveAvailableAIs(this.availableAIs);
+
     if (statusMsg) {
-      statusMsg.innerHTML = `<span style="color: var(--accent-green);">✓ <b>${aiSource}</b> kaynağından ${parsed.length} maç başarıyla eşleştirildi.</span>`;
+      statusMsg.innerHTML = `<span style="color: var(--accent-green);">✓ <b>${aiSource}</b> kaynağından ${parsed.length} maç başarıyla eşleştirildi (Buluta Yazıldı).</span>`;
     }
-    this.showToast('Tablo Güncellendi! ⚡', `${aiSource} için ${parsed.length} maç başarıyla eklendi.`);
+    this.showToast('Tablo Güncellendi! ⚡', `${aiSource} için ${parsed.length} maç buluta ve ekrana işlendi.`);
     this.renderTable();
   }
 
@@ -563,6 +670,7 @@ class AIMatchPulseApp {
 
       this.saveStorage();
       this.renderTable();
+      firebaseService.saveMatchesBatch(this.matchesData);
 
       if (btn) {
         btn.innerHTML = `<span class="pulse-live-dot"></span> <span>⚡ Canlı Skorları / Sonuçları Çek</span>`;
@@ -875,6 +983,7 @@ class AIMatchPulseApp {
       }
       this.saveStorage();
       this.renderTable();
+      firebaseService.saveMatch(key, match);
       this.showToast('Skor Güncellendi ⚽', `${match.displayName} güncellendi.`);
     }
   }
@@ -887,6 +996,7 @@ class AIMatchPulseApp {
       delete this.matchesData[key];
       this.saveStorage();
       this.renderTable();
+      firebaseService.deleteMatch(key);
       this.showToast('Maç Silindi 🗑️', `"${name}" tablodan kaldırıldı.`);
     }
   }
@@ -902,6 +1012,7 @@ class AIMatchPulseApp {
       });
       this.saveStorage();
       this.renderTable();
+      firebaseService.deleteMatchesBatch(keysToDelete);
       this.showToast('Seçilenler Silindi 🗑️', `${keysToDelete.length} maç tablodan temizlendi.`);
     }
   }
@@ -1048,15 +1159,18 @@ class AIMatchPulseApp {
     this.availableAIs = ['ChatGPT', 'Claude', 'Gemini'];
     this.saveStorage();
     this.renderTable();
-    this.showToast('Demo Veriler Yüklendi! 🎲', 'Örnek maçlar ve canlı durumlar işlendi.');
+    firebaseService.saveMatchesBatch(this.matchesData);
+    firebaseService.saveAvailableAIs(this.availableAIs);
+    this.showToast('Demo Veriler Yüklendi! 🎲', 'Örnek maçlar ve canlı durumlar buluta yazıldı.');
   }
 
   clearAllData() {
-    if (confirm('Tüm maç mukayese tablosunu sıfırlamak istediğinize emin misiniz?')) {
+    if (confirm('Tüm maç mukayese tablosunu sıfırlamak istediğinize emin misiniz?\n\n(Buluttaki tüm ortak maçlar da silinecektir)')) {
       this.matchesData = {};
       this.saveStorage();
       this.renderTable();
-      this.showToast('Tablo Sıfırlandı', 'Tüm maç kayıtları temizlendi.');
+      firebaseService.clearAllMatches();
+      this.showToast('Tablo Sıfırlandı', 'Tüm ortak maç kayıtları buluttan temizlendi.');
     }
   }
 
@@ -1182,8 +1296,16 @@ class AIMatchPulseApp {
   }
 }
 
-// Uygulamayı Başlat
-window.addEventListener('DOMContentLoaded', () => {
-  window.app = new AIMatchPulseApp();
-  window.app.init();
-});
+// Global pencereye bağla (inline HTML onclick erişimleri için)
+window.AIMatchPulseApp = AIMatchPulseApp;
+window.firebaseService = firebaseService;
+
+// Uygulama örneğini oluştur ve başlat
+const app = new AIMatchPulseApp();
+window.app = app;
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => app.init());
+} else {
+  app.init();
+}

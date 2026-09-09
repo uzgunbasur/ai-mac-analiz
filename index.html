@@ -454,9 +454,13 @@
             ⚽
           </div>
           <div>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <h1 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">AI MatchPulse</h1>
-              <span class="notion-tag tag-green">v3.0 Canlı</span>
+              <span class="notion-tag tag-green">v4.0 Bulut</span>
+              <span id="cloudSyncStatus" class="notion-tag tag-subtle" style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px;" title="Firebase Cloud Firestore">
+                <span class="pulse-live-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+                <span style="color: var(--accent-green); font-weight: 600;">Bulut Eşitleme: Bağlanıyor...</span>
+              </span>
             </div>
             <p style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">
               Günün Maç Tahmini Prompt Üreticisi, Çoklu AI Mukayese Tablosu & Canlı Skor Liderlik Konsolu
@@ -689,6 +693,6 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
   <div id="notion-toast" class="notion-toast"></div>
 
   <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
-  <script src="./js/app.js?v=3.5.0"></script>
+  <script type="module" src="./js/app.js?v=4.0.0"></script>
 </body>
 </html>
