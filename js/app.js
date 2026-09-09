@@ -4,6 +4,7 @@
  */
 
 import { firebaseService } from './services/firebase.js';
+import { liveScoreService } from './services/liveScores.js';
 
 class AIMatchPulseApp {
   constructor() {
@@ -567,7 +568,7 @@ class AIMatchPulseApp {
     return Object.values(stats).sort((a, b) => b.points - a.points);
   }
 
-  syncLiveScores() {
+  async syncLiveScores() {
     const keys = Object.keys(this.matchesData);
     if (keys.length === 0) {
       alert('Henüz skorları çekilecek bir maç kaydı bulunmuyor.');
@@ -576,113 +577,47 @@ class AIMatchPulseApp {
 
     const btn = document.getElementById('btnSyncScores');
     if (btn) {
-      btn.innerHTML = `<span>⏳ Maç Saatleri & Skorlar Kontrol Ediliyor...</span>`;
+      btn.innerHTML = `<span class="pulse-live-dot"></span> <span>⏳ Gerçek Maç Skorları Çekiliyor (ESPN Veri Akışı)...</span>`;
       btn.disabled = true;
     }
 
-    setTimeout(() => {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      const currentTotalMinutes = currentHour * 60 + currentMinute;
-
-      // Tarih Kontrolü: Seçili maç tarihi bugün mü, geçmiş mi, gelecek mi?
+    try {
       const dateInput = document.getElementById('promptDateInput');
-      let isFutureDate = false;
-      let isPastDate = false;
+      const selectedDate = dateInput ? dateInput.value : '';
 
-      if (dateInput && dateInput.value) {
-        const parts = dateInput.value.split('-');
-        if (parts.length === 3) {
-          const selDate = new Date(parts[0], parts[1] - 1, parts[2]);
-          const todayZero = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          const selZero = new Date(selDate.getFullYear(), selDate.getMonth(), selDate.getDate());
-          if (selZero.getTime() > todayZero.getTime()) {
-            isFutureDate = true;
-          } else if (selZero.getTime() < todayZero.getTime()) {
-            isPastDate = true;
-          }
-        }
-      }
+      // ESPN Live API üzerinden tüm liglerden gerçek maç sonuçlarını çek ve eşleştir
+      const result = await liveScoreService.syncMatchesWithRealScores(this.matchesData, selectedDate);
+      this.matchesData = result.updatedMatches;
 
-      let upcomingCount = 0;
-      let liveCount = 0;
-      let finishedCount = 0;
-
-      keys.forEach((key) => {
-        const match = this.matchesData[key];
-
-        // Maçın başlama saatini doğrula
-        const matchTime = match.time || '21:45';
-        match.time = matchTime;
-
-        let matchStartMinutes = 21 * 60 + 45; // Varsayılan 21:45
-        const timeMatch = matchTime.match(/(\d{1,2})[:\.](\d{2})/);
-        if (timeMatch) {
-          matchStartMinutes = parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2]);
-        }
-
-        // KESİN ZAMAN KONTROLÜ:
-        // Eğer maç tarihi gelecekteyse VEYA bugün olup henüz başlama saati gelmediyse:
-        const hasNotStarted = isFutureDate || (!isPastDate && currentTotalMinutes < matchStartMinutes);
-
-        if (hasNotStarted) {
-          // KESİNLİKLE DOKUNMA! Skor üretilmez, puan/rozet verilmez.
-          match.status = 'upcoming';
-          match.currentScore = null;
-          match.minute = null;
-          match.displayStatus = matchTime;
-          upcomingCount++;
-        } else {
-          // Maçın saati gelmiş veya geçmiş
-          const diffMinutes = isPastDate ? 999 : (currentTotalMinutes - matchStartMinutes);
-
-          if (diffMinutes > 115) {
-            // Maç bitmiş (MS)
-            match.status = 'finished';
-            match.minute = 90;
-            match.displayStatus = 'MS';
-            if (!match.currentScore) {
-              const firstPred = Object.values(match.predictions || {})[0]?.score;
-              match.currentScore = firstPred || '2-1';
-            }
-            finishedCount++;
-          } else {
-            // Maç şu an canlı oynanıyor
-            match.status = 'live';
-            if (diffMinutes <= 45) {
-              match.minute = Math.max(1, diffMinutes);
-              match.displayStatus = `${match.minute}'`;
-            } else if (diffMinutes <= 60) {
-              match.minute = 45;
-              match.displayStatus = 'İY';
-            } else {
-              match.minute = Math.min(90, diffMinutes - 15);
-              match.displayStatus = `${match.minute}'`;
-            }
-            if (!match.currentScore) {
-              match.currentScore = '1-1';
-            }
-            liveCount++;
-          }
-        }
-      });
-
+      // Yerel ve Bulut (Firestore) kaydı
       this.saveStorage();
       this.renderTable();
       firebaseService.saveMatchesBatch(this.matchesData);
 
+      const { finished, live, upcoming, notFound, total, totalRealEventsFound } = result.stats;
+
+      let toastTitle = 'Gerçek Skorlar Güncellendi ⚡';
+      let toastMsg = `${total} maçın gerçek durumları kontrol edildi (${totalRealEventsFound} resmi maç tarandı).`;
+
+      if (finished > 0 || live > 0) {
+        toastMsg = `✅ ${finished} maç bitti (MS), ${live} maç canlı. ${upcoming} maç henüz başlamadı.`;
+      } else if (upcoming > 0 && notFound === 0) {
+        toastTitle = 'Maçlar Henüz Başlamadı ⏰';
+        toastMsg = `${upcoming} maçın saati henüz gelmediği için korundu, sahte skor atanmadı.`;
+      } else if (notFound > 0 && finished === 0 && live === 0) {
+        toastMsg = `${upcoming} maç henüz başlamadı. ${notFound} maç resmi lig fikstüründe bulunamadı (elle skor girebilirsiniz).`;
+      }
+
+      this.showToast(toastTitle, toastMsg);
+    } catch (err) {
+      console.error('Canlı skor çekme hatası:', err);
+      this.showToast('Bağlantı Uyarısı ⚠️', 'Gerçek skorlar çekilirken bir hata oluştu: ' + (err.message || 'Bilinmeyen hata'));
+    } finally {
       if (btn) {
         btn.innerHTML = `<span class="pulse-live-dot"></span> <span>⚡ Canlı Skorları / Sonuçları Çek</span>`;
         btn.disabled = false;
       }
-
-      if (upcomingCount > 0 && liveCount === 0 && finishedCount === 0) {
-        this.showToast('Başlamamış Maçlar Korundu ⏰', `${upcomingCount} maçın saati henüz gelmediği için (Başlamadı) dokunulmadı.`);
-      } else {
-        this.showToast('Canlı Skorlar Güncellendi ⚡', `${liveCount} canlı, ${finishedCount} biten maç güncellendi. ${upcomingCount} henüz başlamamış maç korundu.`);
-      }
-    }, 400);
+    }
   }
 
   calculateConsensus(predictions) {
@@ -1099,60 +1034,74 @@ class AIMatchPulseApp {
 
   loadDemoData() {
     this.matchesData = {
-      'Bayern Münih___Real Madrid': {
-        home: 'Real Madrid',
-        away: 'Bayern Münih',
-        displayName: 'Real Madrid vs Bayern Münih',
+      'Barcelona___Feyenoord': {
+        home: 'Barcelona',
+        away: 'Feyenoord Rotterdam',
+        displayName: 'Barcelona vs Feyenoord',
+        status: 'finished',
+        currentScore: '5-1',
+        minute: 90,
+        displayStatus: 'MS',
+        predictions: {
+          'ChatGPT': { score: '3-1', tip: 'MS 1 & 2.5 Üst', confidence: '%85', analysis: 'Barcelona evinde mutlak favori.' },
+          'Claude': { score: '4-1', tip: 'MS 1 & KG Var', confidence: '%80', analysis: 'Feyenoord gol bulabilir ama Barca kazanır.' },
+          'Gemini': { score: '3-0', tip: 'MS 1', confidence: '%82', analysis: 'Farklı Barcelona galibiyeti.' }
+        }
+      },
+      'Liverpool___Atlético Madrid': {
+        home: 'Liverpool',
+        away: 'Atlético Madrid',
+        displayName: 'Liverpool vs Atlético Madrid',
         status: 'finished',
         currentScore: '2-1',
         minute: 90,
         displayStatus: 'MS',
         predictions: {
-          'ChatGPT': { score: '2-1', tip: 'MS 1 & 2.5 Üst' },
-          'Claude': { score: '2-1', tip: 'KG Var' },
-          'Gemini': { score: '3-1', tip: 'MS 1' }
+          'ChatGPT': { score: '2-1', tip: 'MS 1', confidence: '%75', analysis: 'Anfield faktörü galibiyeti getirir.' },
+          'Claude': { score: '1-1', tip: 'İlk Yarı X', confidence: '%70', analysis: 'Atletico sert savunmasıyla maçı kilitler.' },
+          'Gemini': { score: '2-0', tip: 'MS 1', confidence: '%78', analysis: 'Tempolu Liverpool üstün çıkar.' }
         }
       },
-      'Arsenal___Manchester City': {
-        home: 'Manchester City',
-        away: 'Arsenal',
-        displayName: 'Manchester City vs Arsenal',
-        status: 'live',
-        currentScore: '1-1',
-        minute: 68,
-        displayStatus: "68'",
-        predictions: {
-          'ChatGPT': { score: '1-1', tip: 'İlk Yarı X' },
-          'Claude': { score: '2-1', tip: 'MS 1' },
-          'Gemini': { score: '1-1', tip: 'KG Var' }
-        }
-      },
-      'Inter___Juventus': {
-        home: 'Inter',
-        away: 'Juventus',
-        displayName: 'Inter vs Juventus',
-        status: 'live',
+      'Arsenal___Napoli': {
+        home: 'Arsenal',
+        away: 'Napoli',
+        displayName: 'Arsenal vs Napoli',
+        status: 'finished',
         currentScore: '1-0',
-        minute: 82,
-        displayStatus: "82'",
+        minute: 90,
+        displayStatus: 'MS',
         predictions: {
-          'ChatGPT': { score: '1-0', tip: '2.5 Alt' },
-          'Claude': { score: '1-0', tip: 'MS 1' },
-          'Gemini': { score: '2-0', tip: 'MS 1' }
+          'ChatGPT': { score: '1-0', tip: '2.5 Alt', confidence: '%72', analysis: 'Taktik savaşı, az gollü geçer.' },
+          'Claude': { score: '1-1', tip: 'KG Var', confidence: '%68', analysis: 'İki takım da birbirini tartacaktır.' },
+          'Gemini': { score: '2-1', tip: 'MS 1', confidence: '%74', analysis: 'Arsenal ev sahibi avantajıyla önde.' }
         }
       },
-      'Fenerbahçe___Galatasaray': {
-        home: 'Galatasaray',
-        away: 'Fenerbahçe',
-        displayName: 'Galatasaray vs Fenerbahçe',
+      'Galatasaray___Sporting': {
+        home: 'Sporting CP',
+        away: 'Galatasaray',
+        displayName: 'Sporting vs Galatasaray',
+        status: 'finished',
+        currentScore: '3-1',
+        minute: 90,
+        displayStatus: 'MS',
+        predictions: {
+          'ChatGPT': { score: '2-2', tip: 'KG Var', confidence: '%75', analysis: 'Gollü ve çekişmeli bir Avrupa maçı.' },
+          'Claude': { score: '2-1', tip: 'MS 1', confidence: '%72', analysis: 'Sporting Lizbon sahasında baskın.' },
+          'Gemini': { score: '1-2', tip: 'KG Var & ÇŞ 0-2', confidence: '%65', analysis: 'Galatasaray deplasmanda puan kovalayacak.' }
+        }
+      },
+      'Fenerbahçe___Roma': {
+        home: 'Fenerbahçe',
+        away: 'AS Roma',
+        displayName: 'Fenerbahçe vs AS Roma',
         status: 'upcoming',
         currentScore: null,
-        time: '21:45',
-        displayStatus: '21:45',
+        time: '19:45',
+        displayStatus: '⏰ 19:45',
         predictions: {
-          'ChatGPT': { score: '2-2', tip: 'KG Var' },
-          'Claude': { score: '2-1', tip: 'MS 1' },
-          'Gemini': { score: '2-2', tip: 'KG Var' }
+          'ChatGPT': { score: '2-1', tip: 'KG Var & MS 1', confidence: '%70', analysis: 'Kadıköy atmosferinde çekişmeli maç.' },
+          'Claude': { score: '1-1', tip: 'İlk Yarı X', confidence: '%65', analysis: 'Dengeli başlangıç bekleniyor.' },
+          'Gemini': { score: '2-2', tip: '2.5 Üst', confidence: '%72', analysis: 'Hızlı geçiş hücumları bol pozisyon üretir.' }
         }
       }
     };
@@ -1161,7 +1110,38 @@ class AIMatchPulseApp {
     this.renderTable();
     firebaseService.saveMatchesBatch(this.matchesData);
     firebaseService.saveAvailableAIs(this.availableAIs);
-    this.showToast('Demo Veriler Yüklendi! 🎲', 'Örnek maçlar ve canlı durumlar buluta yazıldı.');
+    this.showToast('Resmi Demo Veriler Yüklendi! 🎲', 'UEFA Şampiyonlar Ligi gerçek maçları yüklendi.');
+  }
+
+  async fetchAndInsertOfficialFixtures() {
+    const dateInput = document.getElementById('promptDateInput');
+    const selectedDate = dateInput ? dateInput.value : '';
+    const btn = document.getElementById('btnFetchOfficialFixtures');
+    if (btn) {
+      btn.innerText = '⏳ Fikstür Çekiliyor...';
+      btn.disabled = true;
+    }
+
+    try {
+      const fixtures = await liveScoreService.getOfficialFixturesText(selectedDate);
+      const txtArea = document.getElementById('promptTextArea');
+      if (fixtures && fixtures.length > 0 && txtArea) {
+        let currentPrompt = txtArea.value;
+        const fixturesBlock = `\n\n🚨 BUGÜNÜN RESMİ FİKSTÜR MAÇLARI (ESPN Doğrulanmış Liste):\n` + fixtures.join('\n') + `\n\nYukarıdaki resmi maçlar haricinde başka maç tahmin etme. Yalnızca bu maçları analiz et.`;
+        txtArea.value = currentPrompt + fixturesBlock;
+        this.showToast('Resmi Fikstür Eklendi! 🌐', `${fixtures.length} gerçek maç prompt metnine eklendi.`);
+      } else {
+        this.showToast('Fikstür Bulunamadı', 'Seçili tarihte üst liglerde resmi maç bulunamadı veya ağ bağlantısı yok.');
+      }
+    } catch (e) {
+      console.error(e);
+      this.showToast('Hata', 'Fikstür çekilemedi.');
+    } finally {
+      if (btn) {
+        btn.innerText = '🌐 Gerçek Fikstürü Prompta Ekle';
+        btn.disabled = false;
+      }
+    }
   }
 
   clearAllData() {
@@ -1231,8 +1211,9 @@ class AIMatchPulseApp {
     document.getElementById('optScore')?.addEventListener('change', () => this.updateDynamicPrompt());
     document.getElementById('optStandart')?.addEventListener('change', () => this.updateDynamicPrompt());
 
-    // Prompt Kopyala
+    // Prompt Kopyala & Resmi Fikstürü Getir
     document.getElementById('copyPromptBtn')?.addEventListener('click', () => this.copyDynamicPrompt());
+    document.getElementById('btnFetchOfficialFixtures')?.addEventListener('click', () => this.fetchAndInsertOfficialFixtures());
 
     // AI Seçim Butonları
     document.querySelectorAll('.ai-btn').forEach(btn => {
@@ -1299,6 +1280,7 @@ class AIMatchPulseApp {
 // Global pencereye bağla (inline HTML onclick erişimleri için)
 window.AIMatchPulseApp = AIMatchPulseApp;
 window.firebaseService = firebaseService;
+window.liveScoreService = liveScoreService;
 
 // Uygulama örneğini oluştur ve başlat
 const app = new AIMatchPulseApp();
