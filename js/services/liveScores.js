@@ -310,24 +310,14 @@ export class LiveScoreService {
           upcomingCount++;
         }
       } else {
-        // ESPN listesinde bulunamayan maç:
-        // Kullanıcı "oynanmamış hatası vermesin" istediği için, AI tahminlerinden konsensüs skorunu hesapla
+        // ESPN listesinde bulunamayan veya henüz oynanmamış maç:
+        // Kesinlikle sahte skor üretilmez; başlamadı olarak korunur!
         notFoundCount++;
         if (!match.currentScore) {
-          const preds = Object.values(match.predictions || {});
-          const validScores = preds.map(p => p.score).filter(Boolean);
-          if (validScores.length > 0) {
-            const scoreCounts = validScores.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {});
-            const topScore = Object.entries(scoreCounts).sort((a, b) => b[1] - a[1])[0][0];
-            match.status = 'finished';
-            match.currentScore = topScore.replace(/\s*[-–:]\s*/, ' - ');
-            match.minute = 90;
-            match.displayStatus = 'MS';
-            finishedCount++;
-          } else {
-            match.status = 'upcoming';
-            match.displayStatus = match.time ? `⏰ ${match.time}` : '⏰ Başlamadı';
-          }
+          match.status = 'upcoming';
+          match.currentScore = null;
+          match.minute = null;
+          match.displayStatus = match.time ? `⏰ ${match.time}` : '⏰ Başlamadı';
         }
       }
 
@@ -345,6 +335,158 @@ export class LiveScoreService {
         totalRealEventsFound: realEvents.length
       }
     };
+  }
+
+  /**
+   * Takım adının sonundaki durum veya parantez kalıntılarını temizler
+   */
+  cleanTrailingStatus(str) {
+    if (!str) return '';
+    return str
+      .replace(/[\(\[\{]?\b(\d{1,2}['’]|\d{1,2}\+\d{1,2}['’]|[iİıI][yY]|ht|ms|ft|b[iİıI]tt[iİıI]|full\s*time|canl[ıi]|live)[\)\]\}]?\s*$/i, '')
+      .replace(/[\s\(\[\{]+(?:\d{1,2}['’]|ms|ft|[iİıI][yY]|ht|canl[ıi]|live|b[iİıI]tt[iİıI]|full\s*time|sonland[ıi])[\)\]\}]*$/i, '')
+      .replace(/\s*[\(\[\{][^\)\]\}]*[\)\]\}]\s*$/, '')
+      .trim();
+  }
+
+  /**
+   * SofaScore, Flashscore, Mackolik veya kullanıcı metninden maç skorlarını ve durumlarını ayrıştırır
+   */
+  parseRawScoreText(rawText) {
+    if (!rawText || typeof rawText !== 'string') return [];
+    const lines = rawText.split(/\r?\n/);
+    const parsed = [];
+
+    for (let rawLine of lines) {
+      let line = rawLine.trim();
+      if (!line) continue;
+
+      // Markdown formatlarını temizle
+      line = line.replace(/\*\*/g, '').replace(/`/g, '').trim();
+
+      let status = 'finished';
+      let minute = 90;
+      let displayStatus = 'MS';
+
+      // 1. Durum Tespiti (Canlı / İY / Bitti / 68' vb.)
+      const lowerTest = line.toLowerCase().replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c');
+      if (/\b(canli|live)\b/.test(lowerTest) || /\b(\d{1,2})['’]\b/.test(line) || /\b(iy|ht|devre\s*arasi)\b/.test(lowerTest)) {
+        status = 'live';
+        const minMatch = line.match(/\b(\d{1,2})['’]\b/);
+        if (minMatch) {
+          minute = parseInt(minMatch[1]);
+          displayStatus = `${minute}'`;
+        } else if (/\b(iy|ht|devre\s*arasi)\b/.test(lowerTest)) {
+          minute = 45;
+          displayStatus = 'İY';
+        } else {
+          minute = 65;
+          displayStatus = 'Canlı';
+        }
+      } else if (/\b(ms|ft|bitti|full\s*time|sonlandi)\b/.test(lowerTest)) {
+        status = 'finished';
+        minute = 90;
+        displayStatus = 'MS';
+      }
+
+      // Satır başı/sonu durum belirteçlerini temizle
+      let cleanLine = line
+        .replace(/^(?:ms|ft|[iİıI][yY]|ht|canl[ıi]|live|b[iİıI]tt[iİıI])[\s:\-\.]+/i, '')
+        .replace(/[\s\(\[\{]+(?:\d{1,2}['’]|ms|ft|[iİıI][yY]|ht|canl[ıi]|live|b[iİıI]tt[iİıI]|full\s*time|sonland[ıi])[\)\]\}]*$/i, '')
+        .trim();
+
+      // Format A: [Takım A] [Skor1] - [Skor2] [Takım B] (Örn: Barcelona 5 - 1 Feyenoord)
+      let m = cleanLine.match(/^(.+?)\s+(\d{1,2})\s*[-–—:]\s*(\d{1,2})\s+(.+)$/);
+      if (m) {
+        const h = this.cleanTrailingStatus(m[1]);
+        const a = this.cleanTrailingStatus(m[4]);
+        if (h && a) {
+          parsed.push({
+            home: h,
+            away: a,
+            score: `${m[2]} - ${m[3]}`,
+            status,
+            minute,
+            displayStatus
+          });
+          continue;
+        }
+      }
+
+      // Format B: [Takım A] vs [Takım B] :? [Skor1] - [Skor2] (Örn: Barcelona vs Feyenoord: 5 - 1)
+      m = cleanLine.match(/^(.+?)\s+(?:vs\.?|karşısında)\s+(.+?)[\s:\-]+(\d{1,2})\s*[-–—:]\s*(\d{1,2})$/i);
+      if (m) {
+        const h = this.cleanTrailingStatus(m[1]);
+        const a = this.cleanTrailingStatus(m[2]);
+        if (h && a) {
+          parsed.push({
+            home: h,
+            away: a,
+            score: `${m[3]} - ${m[4]}`,
+            status,
+            minute,
+            displayStatus
+          });
+          continue;
+        }
+      }
+
+      // Format C: Tab ile ayrılmış web tablosu (SofaScore / Flashscore kopyalaması)
+      const tabs = line.split('\t').map(t => t.trim()).filter(Boolean);
+      if (tabs.length >= 3) {
+        const scoreIdx = tabs.findIndex(t => /^\d{1,2}\s*[-–—:]\s*\d{1,2}$/.test(t));
+        if (scoreIdx > 0 && scoreIdx < tabs.length - 1) {
+          const h = this.cleanTrailingStatus(tabs[scoreIdx - 1]);
+          const a = this.cleanTrailingStatus(tabs[scoreIdx + 1]);
+          const sc = tabs[scoreIdx].replace(/\s*[-–—:]\s*/, ' - ');
+          if (h && a) {
+            parsed.push({ home: h, away: a, score: sc, status, minute, displayStatus });
+            continue;
+          }
+        }
+      }
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Ayrıştırılan ham skorları tablodaki maçlarla eşleştirir ve günceller
+   */
+  matchAndApplyRawScores(matchesData, rawScoresList) {
+    if (!matchesData || !rawScoresList || rawScoresList.length === 0) {
+      return { updatedCount: 0, matchedKeys: [] };
+    }
+
+    let updatedCount = 0;
+    const matchedKeys = [];
+
+    rawScoresList.forEach(rawItem => {
+      for (const [key, match] of Object.entries(matchesData)) {
+        const isMatchNormal = this.areTeamsMatching(rawItem.home, match.home) && this.areTeamsMatching(rawItem.away, match.away);
+        const isMatchReversed = this.areTeamsMatching(rawItem.home, match.away) && this.areTeamsMatching(rawItem.away, match.home);
+
+        if (isMatchNormal || isMatchReversed) {
+          let finalScore = rawItem.score;
+          if (isMatchReversed) {
+            const parts = rawItem.score.split('-').map(s => s.trim());
+            if (parts.length === 2) {
+              finalScore = `${parts[1]} - ${parts[0]}`;
+            }
+          }
+
+          match.status = rawItem.status;
+          match.currentScore = finalScore;
+          match.minute = rawItem.minute;
+          match.displayStatus = rawItem.displayStatus;
+          matchedKeys.push(key);
+          updatedCount++;
+          break;
+        }
+      }
+    });
+
+    return { updatedMatches: matchesData, updatedCount, matchedKeys };
   }
 
   /**

@@ -456,7 +456,7 @@
           <div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <h1 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">AI MatchPulse</h1>
-              <span class="notion-tag tag-green">v4.1 ESPN Canlı</span>
+              <span class="notion-tag tag-green">v5.0 Gerçek Veri & SofaScore</span>
               <span id="cloudSyncStatus" class="notion-tag tag-subtle" style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px;" title="Firebase Cloud Firestore">
                 <span class="pulse-live-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
                 <span style="color: var(--accent-green); font-weight: 600;">Bulut Eşitleme: Bağlanıyor...</span>
@@ -627,15 +627,49 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
           </button>
 
           <!-- 🔴 CANLI SKORLARI / SONUÇLARI ÇEK BUTONU (RESMİ CANLI VERİ) -->
-          <button id="btnSyncScores" onclick="window.app.syncLiveScores()" class="notion-btn notion-btn-live notion-btn-sm" title="UEFA Şampiyonlar Ligi, Premier Lig, La Liga, Süper Lig vb. resmi canlı maç skorlarını ESPN üzerinden çeker">
+          <button id="btnSyncScores" onclick="window.app.syncLiveScores()" class="notion-btn notion-btn-live notion-btn-sm" title="UEFA Şampiyonlar Ligi, Premier Lig, La Liga, Süper Lig, EFL Cup vb. resmi canlı maç skorlarını ESPN üzerinden çeker">
             <span class="pulse-live-dot"></span>
             <span>⚡ Canlı Skorları / Sonuçları Çek (Resmi Veri)</span>
           </button>
 
-          <input type="text" id="tableSearch" placeholder="Maç veya takım ara..." class="notion-input" style="width: 150px; font-size: 12px; padding: 5px 8px;">
+          <!-- 📥 SOFASCORE / FLASHSCORE HAM SKOR YAPIŞTIRMA BUTONU -->
+          <button id="btnToggleScorePaste" onclick="window.app.toggleScorePastePanel()" class="notion-btn notion-btn-sm" style="border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1); color: #818cf8; font-weight: 600;" title="SofaScore, Flashscore veya Mackolik'ten kopyaladığınız maç skorlarını yapıştırıp tek tıkla eşleştirin">
+            <span>📥 SofaScore / Skor Yapıştır</span>
+          </button>
+
+          <input type="text" id="tableSearch" placeholder="Maç veya takım ara..." class="notion-input" style="width: 140px; font-size: 12px; padding: 5px 8px;">
           
           <button id="btnCopyHtml" class="notion-btn notion-btn-sm" title="Tabloyu HTML olarak panoya kopyala">
             <span>📋 Tablo HTML</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SOFASCORE / FLASHSCORE HAM SKOR YAPIŞTIRMA ÇEKMECESİ (DRAWER) -->
+      <div id="panelScorePaste" class="score-paste-drawer" style="display: none; padding: 16px 20px; background: rgba(99, 102, 241, 0.05); border-bottom: 1px solid var(--border-color);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">📥</span>
+            <span style="font-weight: 600; font-size: 13px; color: var(--text-primary);">SofaScore / Flashscore / Mackolik Ham Skor Yapıştırma</span>
+            <span class="notion-tag tag-subtle" style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; font-size: 10px;">Alternatif 2</span>
+          </div>
+          <button type="button" class="notion-btn notion-btn-sm" onclick="window.app.toggleScorePastePanel(false)" style="padding: 2px 8px; font-size: 11px;">✕ Kapat</button>
+        </div>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
+          SofaScore, Flashscore veya Mackolik'ten kopyaladığınız maç ve skor satırlarını doğrudan buraya yapıştırın. Sistem takım isimlerini akıllıca eşleştirerek canlı ve bitmiş (MS) skorları tablonuza anında yansıtır ve buluta kaydeder.
+        </p>
+        <textarea id="scoreRawInput" class="notion-textarea" style="height: 110px; font-family: var(--font-mono); font-size: 12px; margin-bottom: 10px;" placeholder="Örnek Formatlar:
+Chelsea 6 - 3 Leeds United (FT)
+Napoli 0 - 1 Arsenal MS
+Liverpool 2 - 1 Atlético Madrid (Bitti)
+Barcelona vs Feyenoord: 5 - 1
+veya SofaScore/Flashscore kopyalanan liste..."></textarea>
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <span style="font-size: 11px; color: var(--text-muted);">
+            💡 İpucu: Satır sonlarındaki dakika (68', İY) veya bitiş (MS, FT) etiketleri otomatik olarak tanınır.
+          </span>
+          <button id="btnProcessScoreRaw" onclick="window.app.processRawScoresText()" class="notion-btn notion-btn-primary notion-btn-sm" style="background: #6366f1; border-color: #6366f1;">
+            <span>⚡ Skorları Tabloyla Eşleştir & Güncelle</span>
           </button>
         </div>
       </div>
@@ -698,6 +732,6 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
   <div id="notion-toast" class="notion-toast"></div>
 
   <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
-  <script type="module" src="./js/app.js?v=4.2.0"></script>
+  <script type="module" src="./js/app.js?v=5.0.0"></script>
 </body>
 </html>

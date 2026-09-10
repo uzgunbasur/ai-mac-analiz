@@ -640,6 +640,62 @@ class AIMatchPulseApp {
     }
   }
 
+  /**
+   * SofaScore / Flashscore / Mackolik Ham Skor Yapıştırma Çekmecesini Aç/Kapat
+   */
+  toggleScorePastePanel(show) {
+    const panel = document.getElementById('panelScorePaste');
+    if (!panel) return;
+    const isCurrentlyOpen = panel.style.display !== 'none' && panel.style.display !== '';
+    const shouldShow = typeof show === 'boolean' ? show : !isCurrentlyOpen;
+
+    panel.style.display = shouldShow ? 'block' : 'none';
+    if (shouldShow) {
+      const textarea = document.getElementById('scoreRawInput');
+      if (textarea) textarea.focus();
+    }
+  }
+
+  /**
+   * SofaScore / Flashscore / Mackolik Ham Metin Skorlarını Çözümle ve Tabloyla Eşleştir
+   */
+  processRawScoresText() {
+    const textarea = document.getElementById('scoreRawInput');
+    const rawText = textarea ? textarea.value.trim() : '';
+
+    if (!rawText) {
+      this.showToast('Giriş Boş ⚠️', 'Lütfen SofaScore veya Flashscore maç skorlarını metin kutusuna yapıştırın.');
+      return;
+    }
+
+    const parsedScores = liveScoreService.parseRawScoreText(rawText);
+    if (!parsedScores || parsedScores.length === 0) {
+      this.showToast('Skor Bulunamadı ⚠️', 'Yapıştırılan metinde geçerli takım ve skor satırları tespit edilemedi.');
+      return;
+    }
+
+    const { updatedMatches, updatedCount } = liveScoreService.matchAndApplyRawScores(
+      this.matchesData,
+      parsedScores
+    );
+
+    this.matchesData = updatedMatches;
+    this.saveStorage();
+    this.renderTable();
+    firebaseService.saveMatchesBatch(this.matchesData);
+
+    if (updatedCount > 0) {
+      this.showToast('Skorlar Eşleştirildi ⚡', `✅ ${updatedCount} maçın canlı/MS skoru başarıyla güncellendi ve buluta kaydedildi.`);
+      if (textarea) textarea.value = '';
+      this.toggleScorePastePanel(false);
+    } else {
+      this.showToast(
+        'Eşleşme Bulunamadı ℹ️',
+        `${parsedScores.length} skor satırı algılandı fakat tablonuzdaki maçlarla eşleşmedi. Takım isimlerini kontrol edin.`
+      );
+    }
+  }
+
   calculateConsensus(predictions) {
     const scores = [];
     const outcomes = [];
@@ -1256,8 +1312,13 @@ class AIMatchPulseApp {
     // Ham Metin Ekle
     document.getElementById('btnProcessRaw')?.addEventListener('click', () => this.processRawText());
 
-    // Canlı Skorları Çek
+    // Canlı Skorları Çek (Resmi API)
     document.getElementById('btnSyncScores')?.addEventListener('click', () => this.syncLiveScores());
+
+    // SofaScore / Flashscore Ham Skor Yapıştırma Paneli
+    document.getElementById('btnToggleScorePaste')?.addEventListener('click', () => this.toggleScorePastePanel());
+    document.getElementById('btnProcessScoreRaw')?.addEventListener('click', () => this.processRawScoresText());
+    document.getElementById('btnCloseScorePaste')?.addEventListener('click', () => this.toggleScorePastePanel(false));
 
     // Arama
     document.getElementById('tableSearch')?.addEventListener('input', (e) => this.filterTable(e.target.value));
