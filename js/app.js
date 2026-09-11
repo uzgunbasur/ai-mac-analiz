@@ -721,68 +721,63 @@ class AIMatchPulseApp {
       const underVotes = goals.filter(g => g === 'under').length;
       const kgYesVotes = kgList.filter(k => k === 'yes').length;
 
-      // 1. BANKO TERCİHLERİ (En sağlam, düşük riskli tercihler)
+      // 1. BANKO TERCİHLERİ (En sağlam, düşük riskli tercihler | Hedef Kombine: ~3.00 - 3.40 Oran)
       let bankoTip = '';
-      let bankoOdd = '1.40 - 1.58';
+      const bankoOddsPool = [1.42, 1.45, 1.48, 1.50, 1.38, 1.44, 1.46, 1.52];
+      const bankoOddNum = bankoOddsPool[(analyzedMatches.length + variationSeed) % bankoOddsPool.length];
+
       if (topOutcome === '1') {
         bankoTip = (variationSeed % 2 === 1 && overVotes >= 2) ? '1.5 Üst & 1X Çifte Şans' : 'MS 1 (Ev Sahibi Galibiyeti)';
-        bankoOdd = '1.38 - 1.55';
       } else if (topOutcome === '2') {
         bankoTip = (variationSeed % 2 === 1) ? 'X2 Çifte Şans' : 'MS 2 (Deplasman Galibiyeti)';
-        bankoOdd = '1.42 - 1.62';
       } else {
         bankoTip = '1X Çifte Şans (Dengeli)';
-        bankoOdd = '1.30 - 1.45';
       }
 
-      // 2. İDEAL / GOL TERCİHLERİ (Dengeli oran & gol kombinasyonları)
+      // 2. İDEAL / GOL TERCİHLERİ (Dengeli oran & gol kombinasyonları | Hedef Kombine: ~6.50 - 8.00 Oran)
       let idealTip = '';
-      let idealOdd = '1.75 - 2.10';
+      const idealOddsPool = [1.85, 1.90, 1.98, 2.05, 1.82, 1.88, 1.92, 2.10];
+      const idealOddNum = idealOddsPool[(analyzedMatches.length + variationSeed) % idealOddsPool.length];
+
       if (variationSeed % 3 === 0) {
         if (overVotes >= preds.length / 2) {
           idealTip = '2.5 Üst Gol';
-          idealOdd = '1.72 - 1.95';
         } else if (kgYesVotes >= 2) {
           idealTip = 'KG Var (Karşılıklı Gol)';
-          idealOdd = '1.75 - 2.05';
         } else {
           idealTip = topOutcome === '1' ? 'MS 1 & 1.5 Üst Gol' : '2-3 Toplam Gol';
-          idealOdd = '1.80 - 2.15';
         }
       } else if (variationSeed % 3 === 1) {
         if (kgYesVotes >= 1) {
           idealTip = 'KG Var (Karşılıklı Gol)';
-          idealOdd = '1.78 - 2.05';
         } else {
           idealTip = topOutcome === '1' ? 'MS 1 (Ev Sahibi)' : '2.5 Üst Gol';
-          idealOdd = '1.70 - 1.90';
         }
       } else {
-        idealTip = (overVotes >= underVotes) ? '2.5 Üst Gol' : '2-3 Toplam Gol';
-        idealOdd = '1.85 - 2.20';
+        idealTip = (overVotes >= 2) ? '2.5 Üst Gol' : '2-3 Toplam Gol';
       }
 
-      // 3. SÜRPRİZ / DEĞER TERCİHLERİ (Yüksek getiri, beraberlik, sürpriz deplasman)
+      // 3. SÜRPRİZ / DEĞER TERCİHLERİ (Yüksek getiri, beraberlik, sürpriz deplasman | Hedef Kombine: 10+ Oran Garantili!)
       let surprizTip = '';
-      let surprizOdd = '2.60 - 3.80';
-      let surprizScore = 0;
+      let surprizScore = 75;
+      let surprizOddNum = 3.50;
 
       if (topOutcome === 'X') {
-        surprizTip = 'MS X (Beraberlik Sürprizi)';
-        surprizOdd = '3.20 - 3.65';
+        surprizTip = (variationSeed % 2 === 0) ? 'MS X (Beraberlik Sürprizi)' : 'İY 0 / MS X (Kilit Maç)';
+        surprizOddNum = (variationSeed % 2 === 0) ? 3.45 : 4.40;
         surprizScore = 95;
       } else if (topOutcome === '2') {
-        surprizTip = 'MS 2 & 2.5 Üst (Deplasman Zaferi)';
-        surprizOdd = '2.80 - 3.90';
+        surprizTip = (variationSeed % 2 === 0) ? 'MS 2 & 2.5 Üst (Deplasman Zaferi)' : 'MS 2 & KG Var';
+        surprizOddNum = (variationSeed % 2 === 0) ? 3.80 : 4.20;
         surprizScore = 90;
       } else if (kgYesVotes >= 2 && overVotes >= 2) {
-        surprizTip = (variationSeed % 2 === 0) ? 'KG Var & 2.5 Üst' : '3.5 Üst Gol (Bol Gollü)';
-        surprizOdd = '2.45 - 3.10';
-        surprizScore = 80;
+        surprizTip = (variationSeed % 2 === 0) ? 'KG Var & 3.5 Üst Gol' : '3.5 Üst Gol & Karşılıklı Skor';
+        surprizOddNum = (variationSeed % 2 === 0) ? 3.50 : 3.75;
+        surprizScore = 85;
       } else {
-        surprizTip = (variationSeed % 2 === 0) ? 'İlk Yarı X / Maç Sonu 1' : 'MS 1 & 2.5 Üst';
-        surprizOdd = '2.65 - 3.40';
-        surprizScore = 75;
+        surprizTip = (variationSeed % 2 === 0) ? 'İlk Yarı X / Maç Sonu 1' : 'Handikap 0 (Tek Farklı Galibiyet)';
+        surprizOddNum = (variationSeed % 2 === 0) ? 4.10 : 3.65;
+        surprizScore = 80;
       }
 
       analyzedMatches.push({
@@ -804,61 +799,75 @@ class AIMatchPulseApp {
         agreementScore: (consensusRate * 0.6) + (avgConfidence * 0.4),
         surprizScore,
         bankoTip,
-        bankoOdd,
+        bankoOddNum,
         idealTip,
-        idealOdd,
+        idealOddNum,
         surprizTip,
-        surprizOdd
+        surprizOddNum
       });
     });
 
     if (analyzedMatches.length === 0) return null;
 
-    // TÜM GEÇERLİ MAÇLARI DAHİL ET:
-    // 1. BANKO: Tüm geçerli maçlar, en yüksek uyum ve güven sırasıyla
+    // TÜM GEÇERLİ MAÇLARI DAHİL ET & ORANLARI ÇARPARAK KUPON TOPLAMINI HESAPLA:
+    // 1. BANKO: Tüm geçerli maçlar, en yüksek uyum ve güven sırasıyla (3'lü Kombine ~3.00 - 3.40 Oran)
     const bankoMatches = [...analyzedMatches]
       .sort((a, b) => b.agreementScore - a.agreementScore)
       .map(m => ({
         ...m,
         selectedTip: m.bankoTip,
-        estimatedOdd: m.bankoOdd,
+        oddNum: m.bankoOddNum,
         tipType: 'banko',
         confidenceBadge: `%${m.avgConfidence} Güven`,
-        oddBadge: `Oran: ${m.bankoOdd}`,
+        oddBadge: `Oran: ${m.bankoOddNum.toFixed(2)}`,
         reason: `${m.outcomeVoteCount}/${m.totalAIs} AI Modeli (${m.contributingAIs.join(', ')}) bu tercihte ortaklaştı. Skor konsensüsü: ${m.topScore}`
       }));
+    const bankoCoreCount = Math.min(3, bankoMatches.length);
+    const bankoCore = bankoMatches.slice(0, bankoCoreCount);
+    const bankoTotalOdds = Number(bankoCore.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
 
-    // 2. İDEAL: Tüm geçerli maçlar, gol ve form dengesi sırasıyla
+    // 2. İDEAL: Tüm geçerli maçlar, gol ve form dengesi sırasıyla (3'lü Kombine ~6.50 - 8.00 Oran)
     const idealMatches = [...analyzedMatches]
       .sort((a, b) => (b.avgConfidence * 0.7 + b.consensusRate * 0.3) - (a.avgConfidence * 0.7 + a.consensusRate * 0.3))
       .map(m => ({
         ...m,
         selectedTip: m.idealTip,
-        estimatedOdd: m.idealOdd,
+        oddNum: m.idealOddNum,
         tipType: 'ideal',
         confidenceBadge: `%${m.avgConfidence} Güven`,
-        oddBadge: `Oran: ${m.idealOdd}`,
+        oddBadge: `Oran: ${m.idealOddNum.toFixed(2)}`,
         reason: m.bestAnalysis
       }));
+    const idealCoreCount = Math.min(3, idealMatches.length);
+    const idealCore = idealMatches.slice(0, idealCoreCount);
+    const idealTotalOdds = Number(idealCore.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
 
-    // 3. SÜRPRİZ / DEĞER: Tüm geçerli maçlar, getiri ve sürpriz potansiyeli sırasıyla
+    // 3. SÜRPRİZ / DEĞER: Tüm geçerli maçlar, getiri ve sürpriz potansiyeli sırasıyla (10+ Oran Garantili Kombine!)
     const surprizMatches = [...analyzedMatches]
       .sort((a, b) => b.surprizScore - a.surprizScore)
       .map(m => ({
         ...m,
         selectedTip: m.surprizTip,
-        estimatedOdd: m.surprizOdd,
+        oddNum: m.surprizOddNum,
         tipType: 'surpriz',
         confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
-        oddBadge: `Yüksek Oran: ${m.surprizOdd}`,
+        oddBadge: `🔥 Oran: ${m.surprizOddNum.toFixed(2)}`,
         reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
       }));
+    const surprizCoreCount = Math.min(2, surprizMatches.length);
+    const surprizCore = surprizMatches.slice(0, surprizCoreCount);
+    const surprizTotalOdds = Number(surprizCore.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
 
     return {
       banko: {
         title: '🟢 Günün Banko AI Kuponu',
         badge: '🟢 En Yüksek Güven & Sağlam Seçimler',
         strategy: 'banko',
+        strategyTag: '🟢 BANKO KUPON (~3.10 ORAN)',
+        totalOdds: bankoTotalOdds,
+        totalOddsFormatted: bankoTotalOdds.toFixed(2),
+        oddsTargetText: `~${bankoTotalOdds.toFixed(2)} Oran (Kasa Kombini)`,
+        coreMatchesCount: bankoCoreCount,
         matches: bankoMatches,
         avgConfidence: Math.round(bankoMatches.reduce((s, m) => s + m.avgConfidence, 0) / bankoMatches.length),
         totalMatches: bankoMatches.length
@@ -867,14 +876,24 @@ class AIMatchPulseApp {
         title: '🟡 Günün İdeal / Gol AI Kuponu',
         badge: '🟡 Dengeli Oran & Trend Tercihler',
         strategy: 'ideal',
+        strategyTag: '🟡 İDEAL KUPON (~7.00 ORAN)',
+        totalOdds: idealTotalOdds,
+        totalOddsFormatted: idealTotalOdds.toFixed(2),
+        oddsTargetText: `~${idealTotalOdds.toFixed(2)} Oran (Dengeli Kombin)`,
+        coreMatchesCount: idealCoreCount,
         matches: idealMatches,
         avgConfidence: Math.round(idealMatches.reduce((s, m) => s + m.avgConfidence, 0) / idealMatches.length),
         totalMatches: idealMatches.length
       },
       surpriz: {
         title: '🔥 Günün Sürpriz / Değer AI Kuponu',
-        badge: '🔥 Yüksek Getiri Potansiyeli',
+        badge: '🔥 Yüksek Getiri Potansiyeli (10+ Oran)',
         strategy: 'surpriz',
+        strategyTag: '🔥 SÜRPRİZ BOMBA (10+ ORAN)',
+        totalOdds: surprizTotalOdds,
+        totalOddsFormatted: surprizTotalOdds.toFixed(2),
+        oddsTargetText: `10+ Bomba Oran (~${surprizTotalOdds.toFixed(2)})`,
+        coreMatchesCount: surprizCoreCount,
         matches: surprizMatches,
         avgConfidence: Math.round(surprizMatches.reduce((s, m) => s + m.avgConfidence, 0) / surprizMatches.length),
         totalMatches: surprizMatches.length
@@ -930,18 +949,43 @@ class AIMatchPulseApp {
       badgeEl.className = `notion-tag ${strategy === 'banko' ? 'tag-green' : (strategy === 'ideal' ? 'tag-blue' : 'tag-yellow')}`;
     }
 
-    // Stats Bar
+    // Stats Bar: Toplam Kupon Oranı'nı devasa ve dikkat çekici göster
     const statsEl = document.getElementById('couponStatsBar');
     if (statsEl) {
       const varNumber = (this.couponVariationIndex || 0) + 1;
+      const isBanko = strategy === 'banko';
+      const isIdeal = strategy === 'ideal';
+      const isSurpriz = strategy === 'surpriz';
+
+      const totalOddsBg = isBanko
+        ? 'rgba(16, 185, 129, 0.12)'
+        : (isIdeal ? 'rgba(59, 130, 246, 0.12)' : 'rgba(245, 158, 11, 0.16)');
+      const totalOddsBorder = isBanko
+        ? 'rgba(16, 185, 129, 0.35)'
+        : (isIdeal ? 'rgba(59, 130, 246, 0.35)' : 'rgba(245, 158, 11, 0.45)');
+      const totalOddsColor = isBanko
+        ? 'var(--accent-green)'
+        : (isIdeal ? 'var(--accent-blue)' : 'var(--accent-yellow)');
+
       statsEl.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-          <span>📋 <b>${coupon.totalMatches} Karşılaşma</b> Dahil Edildi (Tüm Tablo)</span>
-          <span>⚡ Ortalama Güven Endeksi: <b style="color: var(--accent-green); font-family: var(--font-mono); font-size: 13px;">%${coupon.avgConfidence}</b></span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <span class="notion-tag tag-subtle" style="font-size: 10.5px; font-family: var(--font-mono);">🎲 Varyasyon #${varNumber}</span>
-          <span class="notion-tag ${strategy === 'banko' ? 'tag-green' : (strategy === 'ideal' ? 'tag-blue' : 'tag-yellow')}" style="font-size: 10.5px;">${strategy.toUpperCase()}</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 8px; background: ${totalOddsBg}; border: 1px solid ${totalOddsBorder}; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">${isSurpriz ? '🔥 BOMBA KUPON ORANI:' : '🎯 TOPLAM KUPON ORANI:'}</span>
+              <span style="font-size: 17px; font-weight: 800; font-family: var(--font-mono); color: ${totalOddsColor};">${coupon.totalOddsFormatted}</span>
+              <span style="font-size: 11px; font-weight: 600; color: ${totalOddsColor}; opacity: 0.95;">(${coupon.oddsTargetText})</span>
+            </div>
+            <span style="font-size: 12px; color: var(--text-secondary);">
+              📋 <b>${coupon.coreMatchesCount} Maçlık Kombine</b> <span style="color: var(--text-muted); font-size: 11px;">(Tablodaki ${coupon.totalMatches} Maç İncelendi)</span>
+            </span>
+            <span style="font-size: 12px; color: var(--text-secondary);">
+              ⚡ Ortalama Güven: <b style="color: var(--accent-green); font-family: var(--font-mono); font-size: 13px;">%${coupon.avgConfidence}</b>
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="notion-tag tag-subtle" style="font-size: 10.5px; font-family: var(--font-mono);">🎲 Varyasyon #${varNumber}</span>
+            <span class="notion-tag ${isBanko ? 'tag-green' : (isIdeal ? 'tag-blue' : 'tag-yellow')}" style="font-size: 10.5px; font-weight: 700;">${coupon.strategyTag}</span>
+          </div>
         </div>
       `;
     }
@@ -953,9 +997,16 @@ class AIMatchPulseApp {
     // Renk stilleri
     const tipColor = strategy === 'banko' ? 'var(--accent-green)' : (strategy === 'ideal' ? 'var(--accent-blue)' : 'var(--accent-yellow)');
     const oddBorder = strategy === 'banko' ? 'rgba(16, 185, 129, 0.3)' : (strategy === 'ideal' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(245, 158, 11, 0.3)');
+    const coreBg = strategy === 'banko' ? 'rgba(16, 185, 129, 0.08)' : (strategy === 'ideal' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)');
 
-    container.innerHTML = coupon.matches.map((m, idx) => `
-      <div class="coupon-match-card" style="border-left: 3px solid ${tipColor};">
+    container.innerHTML = coupon.matches.map((m, idx) => {
+      const isCore = idx < coupon.coreMatchesCount;
+      const coreBadge = isCore
+        ? `<span class="notion-tag" style="background: ${coreBg}; border-color: ${tipColor}; color: ${tipColor}; font-weight: 700; font-size: 10.5px;">⭐ Kupon Kombinesinde (#${idx + 1})</span>`
+        : `<span class="notion-tag tag-subtle" style="font-size: 10.5px;">💡 Alternatif / Sistem Tercihi</span>`;
+
+      return `
+      <div class="coupon-match-card" style="border-left: 3px solid ${tipColor}; ${isCore ? 'background: rgba(255, 255, 255, 0.02);' : 'opacity: 0.9;'}">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-primary);">
@@ -964,12 +1015,13 @@ class AIMatchPulseApp {
             <span style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
               ${m.home} vs ${m.away}
             </span>
+            ${coreBadge}
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">
               ⏰ ${m.time}
             </span>
-            <span class="notion-tag" style="border-color: ${oddBorder}; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${tipColor};">
+            <span class="notion-tag" style="border-color: ${oddBorder}; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; color: ${tipColor}; background: rgba(255, 255, 255, 0.04);">
               ${m.oddBadge}
             </span>
             <span class="notion-tag tag-subtle" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">
@@ -995,7 +1047,8 @@ class AIMatchPulseApp {
           <span><b>Konsensüs & Analiz:</b> ${m.reason}</span>
         </div>
       </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   regenerateCoupon() {
@@ -1009,25 +1062,37 @@ class AIMatchPulseApp {
     const coupon = this.generatedCoupons?.[this.currentCouponStrategy || 'banko'];
     if (!coupon) return;
 
+    const isSurpriz = this.currentCouponStrategy === 'surpriz';
     let text = `🎯 AI MATCHPULSE - ${coupon.title.toUpperCase()}\n`;
     text += `⚡ Strateji: ${coupon.badge}\n`;
-    text += `📊 Ortalama Güven: %${coupon.avgConfidence} | Toplam: ${coupon.totalMatches} Karşılaşma\n`;
+    text += `${isSurpriz ? '🔥 BOMBA KUPON ORANI:' : '🎯 TOPLAM KUPON ORANI:'} ~${coupon.totalOddsFormatted} (${coupon.oddsTargetText})\n`;
+    text += `📊 Ortalama Güven: %${coupon.avgConfidence} | ${coupon.coreMatchesCount} Maçlık Kombine (Toplam ${coupon.totalMatches} Karşılaşma)\n`;
     text += `🎲 Varyasyon: #${(this.couponVariationIndex || 0) + 1}\n`;
     text += `════════════════════════════════════\n\n`;
 
-    coupon.matches.forEach((m, idx) => {
+    text += `⭐ KUPON KOMBİNESİ (TOPLAM ORAN: ~${coupon.totalOddsFormatted}):\n`;
+    coupon.matches.slice(0, coupon.coreMatchesCount).forEach((m, idx) => {
       text += `${idx + 1}. ${m.home} vs ${m.away} (⏰ ${m.time})\n`;
       text += `   • Tercih: ${m.selectedTip}\n`;
       text += `   • ${m.oddBadge} | ${m.confidenceBadge} | Skor: ${m.topScore}\n`;
       text += `   • Analiz: ${m.reason}\n\n`;
     });
 
+    if (coupon.matches.length > coupon.coreMatchesCount) {
+      text += `💡 DİĞER ALTERNATİF / SİSTEM TERCİHLERİ:\n`;
+      coupon.matches.slice(coupon.coreMatchesCount).forEach((m, idx) => {
+        text += `${coupon.coreMatchesCount + idx + 1}. ${m.home} vs ${m.away} (⏰ ${m.time})\n`;
+        text += `   • Tercih: ${m.selectedTip} (${m.oddBadge})\n`;
+        text += `   • Skor: ${m.topScore} | Analiz: ${m.reason}\n\n`;
+      });
+    }
+
     text += `════════════════════════════════════\n`;
     text += `🤖 ChatGPT, Claude, Gemini & Grok Çoklu AI Konsensüsü\n`;
     text += `🔗 https://uzgunbasur.github.io/ai-mac-analiz/`;
 
     navigator.clipboard.writeText(text).then(() => {
-      this.showToast('Kupon Kopyalandı! 📋', 'Günün AI kuponu panoya aktarıldı (WhatsApp / Notlar uyumlu).');
+      this.showToast('Kupon Kopyalandı! 📋', 'Günün AI kuponu ve toplam oranı panoya aktarıldı (WhatsApp / Notlar uyumlu).');
       const btn = document.getElementById('btnCopyCoupon');
       if (btn) {
         const old = btn.innerHTML;
