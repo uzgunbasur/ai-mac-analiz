@@ -809,94 +809,187 @@ class AIMatchPulseApp {
 
     if (analyzedMatches.length === 0) return null;
 
-    // TÜM GEÇERLİ MAÇLARI DAHİL ET & ORANLARI ÇARPARAK KUPON TOPLAMINI HESAPLA:
-    // 1. BANKO: Tüm geçerli maçlar, en yüksek uyum ve güven sırasıyla (3'lü Kombine ~3.00 - 3.40 Oran)
-    const bankoMatches = [...analyzedMatches]
-      .sort((a, b) => b.agreementScore - a.agreementScore)
-      .map(m => ({
-        ...m,
-        selectedTip: m.bankoTip,
-        oddNum: m.bankoOddNum,
-        tipType: 'banko',
-        confidenceBadge: `%${m.avgConfidence} Güven`,
-        oddBadge: `Oran: ${m.bankoOddNum.toFixed(2)}`,
-        reason: `${m.outcomeVoteCount}/${m.totalAIs} AI Modeli (${m.contributingAIs.join(', ')}) bu tercihte ortaklaştı. Skor konsensüsü: ${m.topScore}`
-      }));
-    const bankoCoreCount = Math.min(3, bankoMatches.length);
-    const bankoCore = bankoMatches.slice(0, bankoCoreCount);
-    const bankoTotalOdds = Number(bankoCore.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+    // SIRALI MAÇ LİSTELERİ
+    const sortedBanko = [...analyzedMatches].sort((a, b) => b.agreementScore - a.agreementScore);
+    const sortedIdeal = [...analyzedMatches].sort((a, b) => (b.avgConfidence * 0.7 + b.consensusRate * 0.3) - (a.avgConfidence * 0.7 + a.consensusRate * 0.3));
+    const sortedSurpriz = [...analyzedMatches].sort((a, b) => b.surprizScore - a.surprizScore);
 
-    // 2. İDEAL: Tüm geçerli maçlar, gol ve form dengesi sırasıyla (3'lü Kombine ~6.50 - 8.00 Oran)
-    const idealMatches = [...analyzedMatches]
-      .sort((a, b) => (b.avgConfidence * 0.7 + b.consensusRate * 0.3) - (a.avgConfidence * 0.7 + a.consensusRate * 0.3))
-      .map(m => ({
-        ...m,
-        selectedTip: m.idealTip,
-        oddNum: m.idealOddNum,
-        tipType: 'ideal',
-        confidenceBadge: `%${m.avgConfidence} Güven`,
-        oddBadge: `Oran: ${m.idealOddNum.toFixed(2)}`,
-        reason: m.bestAnalysis
-      }));
-    const idealCoreCount = Math.min(3, idealMatches.length);
-    const idealCore = idealMatches.slice(0, idealCoreCount);
-    const idealTotalOdds = Number(idealCore.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+    // =========================================================================
+    // 🎯 GRUP 1: SEÇME / AZ MAÇLI KUPONLAR (2-3 Maç • Kontrollü Risk)
+    // =========================================================================
 
-    // 3. SÜRPRİZ / DEĞER: Tüm geçerli maçlar, getiri ve sürpriz potansiyeli sırasıyla (10+ Oran Garantili Kombine!)
-    const surprizMatches = [...analyzedMatches]
-      .sort((a, b) => b.surprizScore - a.surprizScore)
-      .map(m => ({
-        ...m,
-        selectedTip: m.surprizTip,
-        oddNum: m.surprizOddNum,
-        tipType: 'surpriz',
-        confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
-        oddBadge: `🔥 Oran: ${m.surprizOddNum.toFixed(2)}`,
-        reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
-      }));
-    const surprizCoreCount = Math.min(2, surprizMatches.length);
-    const surprizCore = surprizMatches.slice(0, surprizCoreCount);
-    const surprizTotalOdds = Number(surprizCore.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+    // 1. BANKO KUPON: En yüksek güvene sahip sadece 2-3 garanti maç (~3.10 Oran)
+    const bankoSecmeCount = Math.min(3, sortedBanko.length);
+    const bankoSecmeMatches = sortedBanko.slice(0, bankoSecmeCount).map(m => ({
+      ...m,
+      selectedTip: m.bankoTip,
+      oddNum: m.bankoOddNum,
+      tipType: 'banko',
+      confidenceBadge: `%${m.avgConfidence} Güven`,
+      oddBadge: `Oran: ${m.bankoOddNum.toFixed(2)}`,
+      reason: `${m.outcomeVoteCount}/${m.totalAIs} AI Modeli (${m.contributingAIs.join(', ')}) ortaklaştı. Skor konsensüsü: ${m.topScore}`
+    }));
+    const bankoSecmeTotal = Number(bankoSecmeMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+
+    // 2. İDEAL KUPON: Dengeli oran ve güvene sahip seçme 3 maç (~7.00 Oran)
+    const idealSecmeCount = Math.min(3, sortedIdeal.length);
+    const idealSecmeMatches = sortedIdeal.slice(0, idealSecmeCount).map(m => ({
+      ...m,
+      selectedTip: m.idealTip,
+      oddNum: m.idealOddNum,
+      tipType: 'ideal',
+      confidenceBadge: `%${m.avgConfidence} Güven`,
+      oddBadge: `Oran: ${m.idealOddNum.toFixed(2)}`,
+      reason: m.bestAnalysis
+    }));
+    const idealSecmeTotal = Number(idealSecmeMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+
+    // 3. SÜRPRİZ KUPON: Seçme maçlar arasından yüksek oranlı 2 bomba maç (10+ Oran!)
+    const surprizSecmeCount = Math.min(2, sortedSurpriz.length);
+    const surprizSecmeMatches = sortedSurpriz.slice(0, surprizSecmeCount).map(m => ({
+      ...m,
+      selectedTip: m.surprizTip,
+      oddNum: m.surprizOddNum,
+      tipType: 'surpriz',
+      confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
+      oddBadge: `🔥 Oran: ${m.surprizOddNum.toFixed(2)}`,
+      reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
+    }));
+    const surprizSecmeTotal = Number(surprizSecmeMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+
+    // =========================================================================
+    // 🚀 GRUP 2: TÜM MAÇLARI KULLANAN KOMBİNELER (Tam Liste • Dev Çarpan)
+    // =========================================================================
+
+    // 4. BANKO KOMBİNE: Tablodaki TÜM maçların en garanti/düşük oranlı tercihleriyle tam liste
+    const bankoKombineMatches = sortedBanko.map(m => ({
+      ...m,
+      selectedTip: m.bankoTip,
+      oddNum: m.bankoOddNum,
+      tipType: 'banko',
+      confidenceBadge: `%${m.avgConfidence} Güven`,
+      oddBadge: `Oran: ${m.bankoOddNum.toFixed(2)}`,
+      reason: `${m.outcomeVoteCount}/${m.totalAIs} AI Modeli ortaklaştı. Skor konsensüsü: ${m.topScore}`
+    }));
+    const bankoKombineTotal = Number(bankoKombineMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+
+    // 5. İDEAL KOMBİNE: Tablodaki TÜM maçların standart/trend tercihleriyle tam liste kombine
+    const idealKombineMatches = sortedIdeal.map(m => ({
+      ...m,
+      selectedTip: m.idealTip,
+      oddNum: m.idealOddNum,
+      tipType: 'ideal',
+      confidenceBadge: `%${m.avgConfidence} Güven`,
+      oddBadge: `Oran: ${m.idealOddNum.toFixed(2)}`,
+      reason: m.bestAnalysis
+    }));
+    const idealKombineTotal = Number(idealKombineMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
+
+    // 6. SÜRPRİZ KOMBİNE: Tablodaki TÜM maçların sürpriz/yüksek oranlı seçimleriyle MEGA BOMBA
+    const surprizKombineMatches = sortedSurpriz.map(m => ({
+      ...m,
+      selectedTip: m.surprizTip,
+      oddNum: m.surprizOddNum,
+      tipType: 'surpriz',
+      confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
+      oddBadge: `🔥 Oran: ${m.surprizOddNum.toFixed(2)}`,
+      reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
+    }));
+    const surprizKombineTotal = Number(surprizKombineMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
 
     return {
+      // GRUP 1: SEÇME KUPONLAR
       banko: {
-        title: '🟢 Günün Banko AI Kuponu',
-        badge: '🟢 En Yüksek Güven & Sağlam Seçimler',
+        group: 1,
+        groupTitle: '🎯 1. Grup: Seçme / Az Maçlı Kuponlar',
+        title: '🟢 Günün Banko AI Kuponu (Seçme)',
+        badge: '🟢 En Sağlam 2-3 Seçme Garanti Maç',
         strategy: 'banko',
         strategyTag: '🟢 BANKO KUPON (~3.10 ORAN)',
-        totalOdds: bankoTotalOdds,
-        totalOddsFormatted: bankoTotalOdds.toFixed(2),
-        oddsTargetText: `~${bankoTotalOdds.toFixed(2)} Oran (Kasa Kombini)`,
-        coreMatchesCount: bankoCoreCount,
-        matches: bankoMatches,
-        avgConfidence: Math.round(bankoMatches.reduce((s, m) => s + m.avgConfidence, 0) / bankoMatches.length),
-        totalMatches: bankoMatches.length
+        totalOdds: bankoSecmeTotal,
+        totalOddsFormatted: bankoSecmeTotal.toFixed(2),
+        oddsTargetText: `~${bankoSecmeTotal.toFixed(2)} Oran (Kasa Kombini)`,
+        matches: bankoSecmeMatches,
+        totalMatches: bankoSecmeMatches.length,
+        isFullList: false,
+        avgConfidence: Math.round(bankoSecmeMatches.reduce((s, m) => s + m.avgConfidence, 0) / bankoSecmeMatches.length)
       },
       ideal: {
-        title: '🟡 Günün İdeal / Gol AI Kuponu',
-        badge: '🟡 Dengeli Oran & Trend Tercihler',
+        group: 1,
+        groupTitle: '🎯 1. Grup: Seçme / Az Maçlı Kuponlar',
+        title: '🟡 Günün İdeal / Gol AI Kuponu (Seçme)',
+        badge: '🟡 Dengeli 3 Seçme Maç',
         strategy: 'ideal',
         strategyTag: '🟡 İDEAL KUPON (~7.00 ORAN)',
-        totalOdds: idealTotalOdds,
-        totalOddsFormatted: idealTotalOdds.toFixed(2),
-        oddsTargetText: `~${idealTotalOdds.toFixed(2)} Oran (Dengeli Kombin)`,
-        coreMatchesCount: idealCoreCount,
-        matches: idealMatches,
-        avgConfidence: Math.round(idealMatches.reduce((s, m) => s + m.avgConfidence, 0) / idealMatches.length),
-        totalMatches: idealMatches.length
+        totalOdds: idealSecmeTotal,
+        totalOddsFormatted: idealSecmeTotal.toFixed(2),
+        oddsTargetText: `~${idealSecmeTotal.toFixed(2)} Oran (Dengeli Kombin)`,
+        matches: idealSecmeMatches,
+        totalMatches: idealSecmeMatches.length,
+        isFullList: false,
+        avgConfidence: Math.round(idealSecmeMatches.reduce((s, m) => s + m.avgConfidence, 0) / idealSecmeMatches.length)
       },
       surpriz: {
-        title: '🔥 Günün Sürpriz / Değer AI Kuponu',
-        badge: '🔥 Yüksek Getiri Potansiyeli (10+ Oran)',
+        group: 1,
+        groupTitle: '🎯 1. Grup: Seçme / Az Maçlı Kuponlar',
+        title: '🔥 Günün Sürpriz / Değer AI Kuponu (Seçme)',
+        badge: '🔥 Yüksek Getirili 2 Seçme Bomba Maç',
         strategy: 'surpriz',
-        strategyTag: '🔥 SÜRPRİZ BOMBA (10+ ORAN)',
-        totalOdds: surprizTotalOdds,
-        totalOddsFormatted: surprizTotalOdds.toFixed(2),
-        oddsTargetText: `10+ Bomba Oran (~${surprizTotalOdds.toFixed(2)})`,
-        coreMatchesCount: surprizCoreCount,
-        matches: surprizMatches,
-        avgConfidence: Math.round(surprizMatches.reduce((s, m) => s + m.avgConfidence, 0) / surprizMatches.length),
-        totalMatches: surprizMatches.length
+        strategyTag: '🔥 SÜRPRİZ KUPON (10+ ORAN)',
+        totalOdds: surprizSecmeTotal,
+        totalOddsFormatted: surprizSecmeTotal.toFixed(2),
+        oddsTargetText: `10+ Bomba Oran (~${surprizSecmeTotal.toFixed(2)})`,
+        matches: surprizSecmeMatches,
+        totalMatches: surprizSecmeMatches.length,
+        isFullList: false,
+        avgConfidence: Math.round(surprizSecmeMatches.reduce((s, m) => s + m.avgConfidence, 0) / surprizSecmeMatches.length)
+      },
+
+      // GRUP 2: TÜM MAÇLARI KULLANAN KOMBİNELER
+      banko_kombine: {
+        group: 2,
+        groupTitle: '🚀 2. Grup: Tüm Maçları Kullanan Kombineler',
+        title: '🛡️ Günün Tam Liste Banko Kombinesi',
+        badge: `🛡️ Tablodaki Tüm ${bankoKombineMatches.length} Maçın Garanti Kombinesi`,
+        strategy: 'banko_kombine',
+        strategyTag: '🛡️ BANKO KOMBİNE (TAM LİSTE)',
+        totalOdds: bankoKombineTotal,
+        totalOddsFormatted: bankoKombineTotal.toFixed(2),
+        oddsTargetText: `Tam Liste Garanti Çarpan (~${bankoKombineTotal.toFixed(2)})`,
+        matches: bankoKombineMatches,
+        totalMatches: bankoKombineMatches.length,
+        isFullList: true,
+        avgConfidence: Math.round(bankoKombineMatches.reduce((s, m) => s + m.avgConfidence, 0) / bankoKombineMatches.length)
+      },
+      ideal_kombine: {
+        group: 2,
+        groupTitle: '🚀 2. Grup: Tüm Maçları Kullanan Kombineler',
+        title: '⚡ Günün Tam Liste İdeal Kombinesi',
+        badge: `⚡ Tablodaki Tüm ${idealKombineMatches.length} Maçın İdeal Kombinesi`,
+        strategy: 'ideal_kombine',
+        strategyTag: '⚡ İDEAL KOMBİNE (TAM LİSTE)',
+        totalOdds: idealKombineTotal,
+        totalOddsFormatted: idealKombineTotal.toFixed(2),
+        oddsTargetText: `Tam Liste Trend Çarpan (~${idealKombineTotal.toFixed(2)})`,
+        matches: idealKombineMatches,
+        totalMatches: idealKombineMatches.length,
+        isFullList: true,
+        avgConfidence: Math.round(idealKombineMatches.reduce((s, m) => s + m.avgConfidence, 0) / idealKombineMatches.length)
+      },
+      surpriz_kombine: {
+        group: 2,
+        groupTitle: '🚀 2. Grup: Tüm Maçları Kullanan Kombineler',
+        title: '💥 Günün Tam Liste Mega Sürpriz Kombinesi',
+        badge: `💥 Tablodaki Tüm ${surprizKombineMatches.length} Maçın Mega Bomba Kombinesi`,
+        strategy: 'surpriz_kombine',
+        strategyTag: '💥 SÜRPRİZ KOMBİNE (MEGA DEV ORAN)',
+        totalOdds: surprizKombineTotal,
+        totalOddsFormatted: surprizKombineTotal.toFixed(2),
+        oddsTargetText: `Mega Dev Oran (~${surprizKombineTotal.toFixed(2)})`,
+        matches: surprizKombineMatches,
+        totalMatches: surprizKombineMatches.length,
+        isFullList: true,
+        avgConfidence: Math.round(surprizKombineMatches.reduce((s, m) => s + m.avgConfidence, 0) / surprizKombineMatches.length)
       }
     };
   }
@@ -924,9 +1017,9 @@ class AIMatchPulseApp {
     if (!strategy) strategy = 'banko';
     this.currentCouponStrategy = strategy;
 
-    // Sekme butonlarını anında güncelle
+    // Sekme butonlarını anında güncelle (6 sekme için)
     document.querySelectorAll('.coupon-tab-btn').forEach(btn => {
-      const btnStrat = btn.dataset.strategy || (btn.id.includes('Banko') ? 'banko' : (btn.id.includes('Ideal') ? 'ideal' : 'surpriz'));
+      const btnStrat = btn.dataset.strategy || btn.getAttribute('data-strategy');
       btn.classList.toggle('active', btnStrat === strategy);
     });
 
@@ -942,41 +1035,88 @@ class AIMatchPulseApp {
     const coupon = this.generatedCoupons?.[strategy];
     if (!coupon) return;
 
+    // Renk ve rozet stilleri
+    let tipColor = 'var(--accent-green)';
+    let oddBorder = 'rgba(16, 185, 129, 0.3)';
+    let coreBg = 'rgba(16, 185, 129, 0.08)';
+    let badgeClass = 'tag-green';
+    let totalOddsBg = 'rgba(16, 185, 129, 0.12)';
+    let totalOddsBorder = 'rgba(16, 185, 129, 0.35)';
+    let totalOddsColor = 'var(--accent-green)';
+    let titlePrefix = '🎯 TOPLAM KUPON ORANI:';
+
+    if (strategy === 'ideal') {
+      tipColor = 'var(--accent-blue)';
+      oddBorder = 'rgba(59, 130, 246, 0.3)';
+      coreBg = 'rgba(59, 130, 246, 0.08)';
+      badgeClass = 'tag-blue';
+      totalOddsBg = 'rgba(59, 130, 246, 0.12)';
+      totalOddsBorder = 'rgba(59, 130, 246, 0.35)';
+      totalOddsColor = 'var(--accent-blue)';
+      titlePrefix = '🎯 TOPLAM KUPON ORANI:';
+    } else if (strategy === 'surpriz') {
+      tipColor = 'var(--accent-yellow)';
+      oddBorder = 'rgba(245, 158, 11, 0.3)';
+      coreBg = 'rgba(245, 158, 11, 0.08)';
+      badgeClass = 'tag-yellow';
+      totalOddsBg = 'rgba(245, 158, 11, 0.16)';
+      totalOddsBorder = 'rgba(245, 158, 11, 0.45)';
+      totalOddsColor = 'var(--accent-yellow)';
+      titlePrefix = '🔥 BOMBA KUPON ORANI:';
+    } else if (strategy === 'banko_kombine') {
+      tipColor = '#10b981';
+      oddBorder = 'rgba(16, 185, 129, 0.4)';
+      coreBg = 'rgba(16, 185, 129, 0.1)';
+      badgeClass = 'tag-green';
+      totalOddsBg = 'rgba(16, 185, 129, 0.15)';
+      totalOddsBorder = 'rgba(16, 185, 129, 0.4)';
+      totalOddsColor = '#10b981';
+      titlePrefix = '🛡️ BANKO KOMBİNE ORANI:';
+    } else if (strategy === 'ideal_kombine') {
+      tipColor = '#3b82f6';
+      oddBorder = 'rgba(59, 130, 246, 0.4)';
+      coreBg = 'rgba(59, 130, 246, 0.1)';
+      badgeClass = 'tag-blue';
+      totalOddsBg = 'rgba(59, 130, 246, 0.15)';
+      totalOddsBorder = 'rgba(59, 130, 246, 0.4)';
+      totalOddsColor = '#3b82f6';
+      titlePrefix = '⚡ İDEAL KOMBİNE ORANI:';
+    } else if (strategy === 'surpriz_kombine') {
+      tipColor = '#a855f7';
+      oddBorder = 'rgba(168, 85, 247, 0.4)';
+      coreBg = 'rgba(168, 85, 247, 0.1)';
+      badgeClass = 'tag-purple';
+      totalOddsBg = 'rgba(168, 85, 247, 0.16)';
+      totalOddsBorder = 'rgba(168, 85, 247, 0.45)';
+      totalOddsColor = '#c084fc';
+      titlePrefix = '💥 MEGA BOMBA KOMBİNE:';
+    }
+
     // Header badge
     const badgeEl = document.getElementById('couponStrategyBadge');
     if (badgeEl) {
       badgeEl.innerText = coupon.badge;
-      badgeEl.className = `notion-tag ${strategy === 'banko' ? 'tag-green' : (strategy === 'ideal' ? 'tag-blue' : 'tag-yellow')}`;
+      badgeEl.className = `notion-tag ${badgeClass}`;
     }
 
     // Stats Bar: Toplam Kupon Oranı'nı devasa ve dikkat çekici göster
     const statsEl = document.getElementById('couponStatsBar');
     if (statsEl) {
       const varNumber = (this.couponVariationIndex || 0) + 1;
-      const isBanko = strategy === 'banko';
-      const isIdeal = strategy === 'ideal';
-      const isSurpriz = strategy === 'surpriz';
-
-      const totalOddsBg = isBanko
-        ? 'rgba(16, 185, 129, 0.12)'
-        : (isIdeal ? 'rgba(59, 130, 246, 0.12)' : 'rgba(245, 158, 11, 0.16)');
-      const totalOddsBorder = isBanko
-        ? 'rgba(16, 185, 129, 0.35)'
-        : (isIdeal ? 'rgba(59, 130, 246, 0.35)' : 'rgba(245, 158, 11, 0.45)');
-      const totalOddsColor = isBanko
-        ? 'var(--accent-green)'
-        : (isIdeal ? 'var(--accent-blue)' : 'var(--accent-yellow)');
+      const countDesc = coupon.isFullList
+        ? `📋 <b>Tüm ${coupon.totalMatches} Karşılaşma Dahil</b> (Tam Liste Kombine)`
+        : `📋 <b>${coupon.totalMatches} Seçme Karşılaşma</b> (Kasa / Kontrollü Risk)`;
 
       statsEl.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 10px;">
           <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
             <div style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 8px; background: ${totalOddsBg}; border: 1px solid ${totalOddsBorder}; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
-              <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">${isSurpriz ? '🔥 BOMBA KUPON ORANI:' : '🎯 TOPLAM KUPON ORANI:'}</span>
+              <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">${titlePrefix}</span>
               <span style="font-size: 17px; font-weight: 800; font-family: var(--font-mono); color: ${totalOddsColor};">${coupon.totalOddsFormatted}</span>
               <span style="font-size: 11px; font-weight: 600; color: ${totalOddsColor}; opacity: 0.95;">(${coupon.oddsTargetText})</span>
             </div>
             <span style="font-size: 12px; color: var(--text-secondary);">
-              📋 <b>${coupon.coreMatchesCount} Maçlık Kombine</b> <span style="color: var(--text-muted); font-size: 11px;">(Tablodaki ${coupon.totalMatches} Maç İncelendi)</span>
+              ${countDesc}
             </span>
             <span style="font-size: 12px; color: var(--text-secondary);">
               ⚡ Ortalama Güven: <b style="color: var(--accent-green); font-family: var(--font-mono); font-size: 13px;">%${coupon.avgConfidence}</b>
@@ -984,7 +1124,7 @@ class AIMatchPulseApp {
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="notion-tag tag-subtle" style="font-size: 10.5px; font-family: var(--font-mono);">🎲 Varyasyon #${varNumber}</span>
-            <span class="notion-tag ${isBanko ? 'tag-green' : (isIdeal ? 'tag-blue' : 'tag-yellow')}" style="font-size: 10.5px; font-weight: 700;">${coupon.strategyTag}</span>
+            <span class="notion-tag ${badgeClass}" style="font-size: 10.5px; font-weight: 700;">${coupon.strategyTag}</span>
           </div>
         </div>
       `;
@@ -994,19 +1134,13 @@ class AIMatchPulseApp {
     const container = document.getElementById('couponMatchesContainer');
     if (!container) return;
 
-    // Renk stilleri
-    const tipColor = strategy === 'banko' ? 'var(--accent-green)' : (strategy === 'ideal' ? 'var(--accent-blue)' : 'var(--accent-yellow)');
-    const oddBorder = strategy === 'banko' ? 'rgba(16, 185, 129, 0.3)' : (strategy === 'ideal' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(245, 158, 11, 0.3)');
-    const coreBg = strategy === 'banko' ? 'rgba(16, 185, 129, 0.08)' : (strategy === 'ideal' ? 'rgba(59, 130, 246, 0.08)' : 'rgba(245, 158, 11, 0.08)');
-
     container.innerHTML = coupon.matches.map((m, idx) => {
-      const isCore = idx < coupon.coreMatchesCount;
-      const coreBadge = isCore
-        ? `<span class="notion-tag" style="background: ${coreBg}; border-color: ${tipColor}; color: ${tipColor}; font-weight: 700; font-size: 10.5px;">⭐ Kupon Kombinesinde (#${idx + 1})</span>`
-        : `<span class="notion-tag tag-subtle" style="font-size: 10.5px;">💡 Alternatif / Sistem Tercihi</span>`;
+      const matchBadge = coupon.isFullList
+        ? `<span class="notion-tag" style="background: ${coreBg}; border-color: ${tipColor}; color: ${tipColor}; font-weight: 700; font-size: 10.5px;">🚀 Kombine Maçı (#${idx + 1} / ${coupon.totalMatches})</span>`
+        : `<span class="notion-tag" style="background: ${coreBg}; border-color: ${tipColor}; color: ${tipColor}; font-weight: 700; font-size: 10.5px;">⭐ Seçme Kupon Maçı (#${idx + 1})</span>`;
 
       return `
-      <div class="coupon-match-card" style="border-left: 3px solid ${tipColor}; ${isCore ? 'background: rgba(255, 255, 255, 0.02);' : 'opacity: 0.9;'}">
+      <div class="coupon-match-card" style="border-left: 3px solid ${tipColor};">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-primary);">
@@ -1015,7 +1149,7 @@ class AIMatchPulseApp {
             <span style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
               ${m.home} vs ${m.away}
             </span>
-            ${coreBadge}
+            ${matchBadge}
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">
@@ -1062,30 +1196,26 @@ class AIMatchPulseApp {
     const coupon = this.generatedCoupons?.[this.currentCouponStrategy || 'banko'];
     if (!coupon) return;
 
-    const isSurpriz = this.currentCouponStrategy === 'surpriz';
     let text = `🎯 AI MATCHPULSE - ${coupon.title.toUpperCase()}\n`;
     text += `⚡ Strateji: ${coupon.badge}\n`;
-    text += `${isSurpriz ? '🔥 BOMBA KUPON ORANI:' : '🎯 TOPLAM KUPON ORANI:'} ~${coupon.totalOddsFormatted} (${coupon.oddsTargetText})\n`;
-    text += `📊 Ortalama Güven: %${coupon.avgConfidence} | ${coupon.coreMatchesCount} Maçlık Kombine (Toplam ${coupon.totalMatches} Karşılaşma)\n`;
+    text += `📂 Kategori: ${coupon.groupTitle}\n`;
+    text += `💰 TOPLAM KUPON ORANI: ~${coupon.totalOddsFormatted} (${coupon.oddsTargetText})\n`;
+    text += `📊 Ortalama Güven: %${coupon.avgConfidence} | Toplam: ${coupon.totalMatches} Karşılaşma (${coupon.isFullList ? 'Tam Liste Kombine' : 'Seçme Kupon'})\n`;
     text += `🎲 Varyasyon: #${(this.couponVariationIndex || 0) + 1}\n`;
     text += `════════════════════════════════════\n\n`;
 
-    text += `⭐ KUPON KOMBİNESİ (TOPLAM ORAN: ~${coupon.totalOddsFormatted}):\n`;
-    coupon.matches.slice(0, coupon.coreMatchesCount).forEach((m, idx) => {
+    if (coupon.isFullList) {
+      text += `🚀 TAM LİSTE KOMBİNESİ (TOPLAM ORAN: ~${coupon.totalOddsFormatted}):\n`;
+    } else {
+      text += `⭐ SEÇME KUPON KOMBİNESİ (TOPLAM ORAN: ~${coupon.totalOddsFormatted}):\n`;
+    }
+
+    coupon.matches.forEach((m, idx) => {
       text += `${idx + 1}. ${m.home} vs ${m.away} (⏰ ${m.time})\n`;
       text += `   • Tercih: ${m.selectedTip}\n`;
       text += `   • ${m.oddBadge} | ${m.confidenceBadge} | Skor: ${m.topScore}\n`;
       text += `   • Analiz: ${m.reason}\n\n`;
     });
-
-    if (coupon.matches.length > coupon.coreMatchesCount) {
-      text += `💡 DİĞER ALTERNATİF / SİSTEM TERCİHLERİ:\n`;
-      coupon.matches.slice(coupon.coreMatchesCount).forEach((m, idx) => {
-        text += `${coupon.coreMatchesCount + idx + 1}. ${m.home} vs ${m.away} (⏰ ${m.time})\n`;
-        text += `   • Tercih: ${m.selectedTip} (${m.oddBadge})\n`;
-        text += `   • Skor: ${m.topScore} | Analiz: ${m.reason}\n\n`;
-      });
-    }
 
     text += `════════════════════════════════════\n`;
     text += `🤖 ChatGPT, Claude, Gemini & Grok Çoklu AI Konsensüsü\n`;
@@ -1729,10 +1859,10 @@ class AIMatchPulseApp {
       el.addEventListener('click', () => this.closeCouponModal());
     });
 
-    // Kupon Strateji Sekmeleri (Banko / İdeal / Sürpriz)
+    // Kupon Strateji Sekmeleri (6'lı Kategori Seti)
     document.querySelectorAll('.coupon-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const strat = btn.dataset.strategy || (btn.id.includes('Banko') ? 'banko' : (btn.id.includes('Ideal') ? 'ideal' : 'surpriz'));
+        const strat = btn.dataset.strategy || btn.getAttribute('data-strategy') || 'banko';
         this.switchCouponTab(strat);
       });
     });
