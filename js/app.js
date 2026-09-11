@@ -15,6 +15,7 @@ class AIMatchPulseApp {
     this.currentTab = 'all';
     this.isCloudConnected = false;
     this.currentCouponStrategy = 'banko';
+    this.couponVariationIndex = 0;
     this.generatedCoupons = null;
     window.app = this;
   }
@@ -643,11 +644,11 @@ class AIMatchPulseApp {
   }
 
   /**
-   * 🎯 AI AKILLI KUPON MOTORU
-   * Tablodaki tüm AI modellerinin (ChatGPT, Claude, Gemini, Grok) tahminlerini,
-   * güven oranlarını (%...) ve konsensüs tercihlerini analiz eder.
+   * 🎯 AI AKILLI KUPON MOTORU (v6.1 - Tam Kapsam & Gerçek Zamanlı Varyasyon)
+   * Tablodaki tüm geçerli maçları stratejiye göre filtreler, oranlandırır ve harmanlar.
+   * Maç sayısını 3-4 ile sınırlamaz; tablodaki tüm analiz edilmiş maçları kupona dahil eder.
    */
-  generateAICoupons() {
+  generateAICoupons(variationSeed = 0) {
     const matches = Object.values(this.matchesData || {});
     if (matches.length === 0) return null;
 
@@ -668,7 +669,7 @@ class AIMatchPulseApp {
 
       preds.forEach(([ai, p]) => {
         // Güven ayrıştırma (örn: "%85" -> 85)
-        let confNum = 75; // varsayılan
+        let confNum = 75;
         if (p.confidence) {
           const numMatch = String(p.confidence).match(/\d{1,3}/);
           if (numMatch) {
@@ -712,18 +713,77 @@ class AIMatchPulseApp {
       const scoreCounts = scores.reduce((acc, s) => { acc[s] = (acc[s] || 0) + 1; return acc; }, {});
       const topScore = Object.entries(scoreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '2 - 1';
 
-      // En iyi analiz
-      const bestAnalysis = aiAnalyses.sort((a, b) => b.conf - a.conf)[0]?.text || 'Modeller bu karşılaşmada ortak eğilim gösteriyor.';
+      // En iyi analiz metni
+      const bestAnalysis = aiAnalyses.sort((a, b) => b.conf - a.conf)[0]?.text || 'Yapay zeka modelleri bu karşılaşmada ortak eğilim gösteriyor.';
 
-      // Tercih belirleme
+      // Gol & KG eğilimleri
       const overVotes = goals.filter(g => g === 'over').length;
+      const underVotes = goals.filter(g => g === 'under').length;
       const kgYesVotes = kgList.filter(k => k === 'yes').length;
 
-      let safeTip = topOutcome === '1' ? 'MS 1 (Ev Sahibi Galibiyeti)' : (topOutcome === '2' ? 'MS 2 (Deplasman Galibiyeti)' : 'MS X (Beraberlik)');
-      let goalTip = (overVotes >= preds.length / 2) ? '2.5 Üst Gol' : '2.5 Alt Gol';
-      let valueTip = topOutcome === 'X' 
-        ? 'MS X (Beraberlik Sürprizi)' 
-        : (kgYesVotes >= 2 ? 'KG Var & 2.5 Üst' : (topOutcome === '2' ? 'MS 2 (Deplasman Galibiyeti)' : 'MS 1 & 2.5 Üst'));
+      // 1. BANKO TERCİHLERİ (En sağlam, düşük riskli tercihler)
+      let bankoTip = '';
+      let bankoOdd = '1.40 - 1.58';
+      if (topOutcome === '1') {
+        bankoTip = (variationSeed % 2 === 1 && overVotes >= 2) ? '1.5 Üst & 1X Çifte Şans' : 'MS 1 (Ev Sahibi Galibiyeti)';
+        bankoOdd = '1.38 - 1.55';
+      } else if (topOutcome === '2') {
+        bankoTip = (variationSeed % 2 === 1) ? 'X2 Çifte Şans' : 'MS 2 (Deplasman Galibiyeti)';
+        bankoOdd = '1.42 - 1.62';
+      } else {
+        bankoTip = '1X Çifte Şans (Dengeli)';
+        bankoOdd = '1.30 - 1.45';
+      }
+
+      // 2. İDEAL / GOL TERCİHLERİ (Dengeli oran & gol kombinasyonları)
+      let idealTip = '';
+      let idealOdd = '1.75 - 2.10';
+      if (variationSeed % 3 === 0) {
+        if (overVotes >= preds.length / 2) {
+          idealTip = '2.5 Üst Gol';
+          idealOdd = '1.72 - 1.95';
+        } else if (kgYesVotes >= 2) {
+          idealTip = 'KG Var (Karşılıklı Gol)';
+          idealOdd = '1.75 - 2.05';
+        } else {
+          idealTip = topOutcome === '1' ? 'MS 1 & 1.5 Üst Gol' : '2-3 Toplam Gol';
+          idealOdd = '1.80 - 2.15';
+        }
+      } else if (variationSeed % 3 === 1) {
+        if (kgYesVotes >= 1) {
+          idealTip = 'KG Var (Karşılıklı Gol)';
+          idealOdd = '1.78 - 2.05';
+        } else {
+          idealTip = topOutcome === '1' ? 'MS 1 (Ev Sahibi)' : '2.5 Üst Gol';
+          idealOdd = '1.70 - 1.90';
+        }
+      } else {
+        idealTip = (overVotes >= underVotes) ? '2.5 Üst Gol' : '2-3 Toplam Gol';
+        idealOdd = '1.85 - 2.20';
+      }
+
+      // 3. SÜRPRİZ / DEĞER TERCİHLERİ (Yüksek getiri, beraberlik, sürpriz deplasman)
+      let surprizTip = '';
+      let surprizOdd = '2.60 - 3.80';
+      let surprizScore = 0;
+
+      if (topOutcome === 'X') {
+        surprizTip = 'MS X (Beraberlik Sürprizi)';
+        surprizOdd = '3.20 - 3.65';
+        surprizScore = 95;
+      } else if (topOutcome === '2') {
+        surprizTip = 'MS 2 & 2.5 Üst (Deplasman Zaferi)';
+        surprizOdd = '2.80 - 3.90';
+        surprizScore = 90;
+      } else if (kgYesVotes >= 2 && overVotes >= 2) {
+        surprizTip = (variationSeed % 2 === 0) ? 'KG Var & 2.5 Üst' : '3.5 Üst Gol (Bol Gollü)';
+        surprizOdd = '2.45 - 3.10';
+        surprizScore = 80;
+      } else {
+        surprizTip = (variationSeed % 2 === 0) ? 'İlk Yarı X / Maç Sonu 1' : 'MS 1 & 2.5 Üst';
+        surprizOdd = '2.65 - 3.40';
+        surprizScore = 75;
+      }
 
       analyzedMatches.push({
         key: [m.home, m.away].sort().join('___'),
@@ -739,56 +799,65 @@ class AIMatchPulseApp {
         consensusRate,
         avgConfidence,
         topScore,
-        safeTip,
-        goalTip,
-        valueTip,
         bestAnalysis,
         contributingAIs: preds.map(([ai]) => ai),
-        agreementScore: (consensusRate * 0.6) + (avgConfidence * 0.4)
+        agreementScore: (consensusRate * 0.6) + (avgConfidence * 0.4),
+        surprizScore,
+        bankoTip,
+        bankoOdd,
+        idealTip,
+        idealOdd,
+        surprizTip,
+        surprizOdd
       });
     });
 
     if (analyzedMatches.length === 0) return null;
 
-    // 1. BANKO KUPON: En yüksek uyum ve en yüksek güvene sahip maçlar
-    const bankoCandidates = [...analyzedMatches].sort((a, b) => b.agreementScore - a.agreementScore);
-    const bankoMatches = bankoCandidates.slice(0, Math.min(4, Math.max(2, bankoCandidates.length))).map(m => ({
-      ...m,
-      selectedTip: m.safeTip,
-      tipType: 'banko',
-      confidenceBadge: `%${m.avgConfidence} Güven`,
-      reason: `${m.outcomeVoteCount}/${m.totalAIs} AI Modeli (${m.contributingAIs.join(', ')}) bu tercihte ortaklaştı.`
-    }));
+    // TÜM GEÇERLİ MAÇLARI DAHİL ET:
+    // 1. BANKO: Tüm geçerli maçlar, en yüksek uyum ve güven sırasıyla
+    const bankoMatches = [...analyzedMatches]
+      .sort((a, b) => b.agreementScore - a.agreementScore)
+      .map(m => ({
+        ...m,
+        selectedTip: m.bankoTip,
+        estimatedOdd: m.bankoOdd,
+        tipType: 'banko',
+        confidenceBadge: `%${m.avgConfidence} Güven`,
+        oddBadge: `Oran: ${m.bankoOdd}`,
+        reason: `${m.outcomeVoteCount}/${m.totalAIs} AI Modeli (${m.contributingAIs.join(', ')}) bu tercihte ortaklaştı. Skor konsensüsü: ${m.topScore}`
+      }));
 
-    // 2. İDEAL / GOL KUPONU: Gol eğilimleri ve dengeli tercihler
-    const idealCandidates = [...analyzedMatches].sort((a, b) => b.avgConfidence - a.avgConfidence);
-    const idealMatches = idealCandidates.slice(0, Math.min(4, Math.max(2, idealCandidates.length))).map((m, idx) => ({
-      ...m,
-      selectedTip: (idx % 2 === 1 && m.goalTip) ? m.goalTip : m.safeTip,
-      tipType: 'ideal',
-      confidenceBadge: `%${m.avgConfidence} Güven`,
-      reason: m.bestAnalysis
-    }));
+    // 2. İDEAL: Tüm geçerli maçlar, gol ve form dengesi sırasıyla
+    const idealMatches = [...analyzedMatches]
+      .sort((a, b) => (b.avgConfidence * 0.7 + b.consensusRate * 0.3) - (a.avgConfidence * 0.7 + a.consensusRate * 0.3))
+      .map(m => ({
+        ...m,
+        selectedTip: m.idealTip,
+        estimatedOdd: m.idealOdd,
+        tipType: 'ideal',
+        confidenceBadge: `%${m.avgConfidence} Güven`,
+        oddBadge: `Oran: ${m.idealOdd}`,
+        reason: m.bestAnalysis
+      }));
 
-    // 3. SÜRPRİZ / DEĞER KUPONU: Beraberlik veya yüksek oran potansiyeli
-    const surprizCandidates = [...analyzedMatches].sort((a, b) => {
-      const aIsSurpriz = (a.topOutcome === 'X' || a.topOutcome === '2') ? 1 : 0;
-      const bIsSurpriz = (b.topOutcome === 'X' || b.topOutcome === '2') ? 1 : 0;
-      if (aIsSurpriz !== bIsSurpriz) return bIsSurpriz - aIsSurpriz;
-      return b.avgConfidence - a.avgConfidence;
-    });
-    const surprizMatches = surprizCandidates.slice(0, Math.min(3, Math.max(2, surprizCandidates.length))).map(m => ({
-      ...m,
-      selectedTip: m.valueTip,
-      tipType: 'surpriz',
-      confidenceBadge: `%${Math.max(65, m.avgConfidence - 5)} Değer Güveni`,
-      reason: m.bestAnalysis || 'Yüksek getiri / oran potansiyeline sahip değer tercihi.'
-    }));
+    // 3. SÜRPRİZ / DEĞER: Tüm geçerli maçlar, getiri ve sürpriz potansiyeli sırasıyla
+    const surprizMatches = [...analyzedMatches]
+      .sort((a, b) => b.surprizScore - a.surprizScore)
+      .map(m => ({
+        ...m,
+        selectedTip: m.surprizTip,
+        estimatedOdd: m.surprizOdd,
+        tipType: 'surpriz',
+        confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
+        oddBadge: `Yüksek Oran: ${m.surprizOdd}`,
+        reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
+      }));
 
     return {
       banko: {
         title: '🟢 Günün Banko AI Kuponu',
-        badge: '🟢 En Yüksek Güven & Tam Konsensüs',
+        badge: '🟢 En Yüksek Güven & Sağlam Seçimler',
         strategy: 'banko',
         matches: bankoMatches,
         avgConfidence: Math.round(bankoMatches.reduce((s, m) => s + m.avgConfidence, 0) / bankoMatches.length),
@@ -814,13 +883,12 @@ class AIMatchPulseApp {
   }
 
   openCouponModal() {
-    const coupons = this.generateAICoupons();
-    if (!coupons) {
+    this.generatedCoupons = this.generateAICoupons(this.couponVariationIndex || 0);
+    if (!this.generatedCoupons) {
       this.showToast('Veri Bulunamadı ⚠️', 'Kupon üretmek için tablonuzda en az bir yapay zeka tahmini bulunmalıdır. Demo veri yükleyebilir veya tahmin yapıştırabilirsiniz.');
       return;
     }
 
-    this.generatedCoupons = coupons;
     const modal = document.getElementById('aiCouponModal');
     if (modal) {
       modal.style.display = 'flex';
@@ -834,17 +902,23 @@ class AIMatchPulseApp {
   }
 
   switchCouponTab(strategy) {
+    if (!strategy) strategy = 'banko';
     this.currentCouponStrategy = strategy;
+
+    // Sekme butonlarını anında güncelle
     document.querySelectorAll('.coupon-tab-btn').forEach(btn => {
-      const isMatch = btn.id === `tabCoupon${strategy.charAt(0).toUpperCase() + strategy.slice(1)}` || btn.dataset.couponType === strategy;
-      btn.classList.toggle('active', isMatch);
+      const btnStrat = btn.dataset.strategy || (btn.id.includes('Banko') ? 'banko' : (btn.id.includes('Ideal') ? 'ideal' : 'surpriz'));
+      btn.classList.toggle('active', btnStrat === strategy);
     });
+
+    // İlgili kupon görünümünü çiz
     this.renderCouponView(strategy);
   }
 
   renderCouponView(strategy) {
+    if (!strategy) strategy = 'banko';
     if (!this.generatedCoupons || !this.generatedCoupons[strategy]) {
-      this.generatedCoupons = this.generateAICoupons();
+      this.generatedCoupons = this.generateAICoupons(this.couponVariationIndex || 0);
     }
     const coupon = this.generatedCoupons?.[strategy];
     if (!coupon) return;
@@ -859,14 +933,15 @@ class AIMatchPulseApp {
     // Stats Bar
     const statsEl = document.getElementById('couponStatsBar');
     if (statsEl) {
+      const varNumber = (this.couponVariationIndex || 0) + 1;
       statsEl.innerHTML = `
         <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-          <span>📋 <b>${coupon.totalMatches} Karşılaşma</b> Seçildi</span>
+          <span>📋 <b>${coupon.totalMatches} Karşılaşma</b> Dahil Edildi (Tüm Tablo)</span>
           <span>⚡ Ortalama Güven Endeksi: <b style="color: var(--accent-green); font-family: var(--font-mono); font-size: 13px;">%${coupon.avgConfidence}</b></span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px;">
-          <span style="font-size: 11px;">🤖 Yapay Zeka Konsensüsü:</span>
-          <span class="notion-tag tag-green" style="font-size: 10.5px;">Çoklu Model Onaylı</span>
+          <span class="notion-tag tag-subtle" style="font-size: 10.5px; font-family: var(--font-mono);">🎲 Varyasyon #${varNumber}</span>
+          <span class="notion-tag ${strategy === 'banko' ? 'tag-green' : (strategy === 'ideal' ? 'tag-blue' : 'tag-yellow')}" style="font-size: 10.5px;">${strategy.toUpperCase()}</span>
         </div>
       `;
     }
@@ -875,11 +950,15 @@ class AIMatchPulseApp {
     const container = document.getElementById('couponMatchesContainer');
     if (!container) return;
 
+    // Renk stilleri
+    const tipColor = strategy === 'banko' ? 'var(--accent-green)' : (strategy === 'ideal' ? 'var(--accent-blue)' : 'var(--accent-yellow)');
+    const oddBorder = strategy === 'banko' ? 'rgba(16, 185, 129, 0.3)' : (strategy === 'ideal' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(245, 158, 11, 0.3)');
+
     container.innerHTML = coupon.matches.map((m, idx) => `
-      <div class="coupon-match-card">
+      <div class="coupon-match-card" style="border-left: 3px solid ${tipColor};">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 22px; height: 22px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-muted);">
+            <span style="width: 24px; height: 24px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--text-primary);">
               ${idx + 1}
             </span>
             <span style="font-weight: 700; font-size: 14px; color: var(--text-primary);">
@@ -890,7 +969,10 @@ class AIMatchPulseApp {
             <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">
               ⏰ ${m.time}
             </span>
-            <span class="notion-tag tag-green" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">
+            <span class="notion-tag" style="border-color: ${oddBorder}; font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: ${tipColor};">
+              ${m.oddBadge}
+            </span>
+            <span class="notion-tag tag-subtle" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600;">
               ${m.confidenceBadge}
             </span>
           </div>
@@ -898,28 +980,29 @@ class AIMatchPulseApp {
 
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 12px; background: rgba(255, 255, 255, 0.03); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 12px; color: var(--text-muted);">AI Tercihi:</span>
-            <span style="font-weight: 700; font-size: 13px; color: var(--accent-green);">
+            <span style="font-size: 11.5px; color: var(--text-muted);">Önerilen Tercih:</span>
+            <span style="font-weight: 700; font-size: 13.5px; color: ${tipColor};">
               🎯 ${m.selectedTip}
             </span>
           </div>
-          <div style="font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono);">
+          <div style="font-size: 11.5px; color: var(--text-secondary); font-family: var(--font-mono);">
             Skor Konsensüsü: <span style="font-weight: 700; color: var(--text-primary);">${m.topScore}</span>
           </div>
         </div>
 
-        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4; display: flex; align-items: flex-start; gap: 6px;">
+        <div style="font-size: 11.5px; color: var(--text-muted); line-height: 1.4; display: flex; align-items: flex-start; gap: 6px;">
           <span>💡</span>
-          <span><b>Konsensüs:</b> ${m.reason}</span>
+          <span><b>Konsensüs & Analiz:</b> ${m.reason}</span>
         </div>
       </div>
     `).join('');
   }
 
   regenerateCoupon() {
-    this.generatedCoupons = this.generateAICoupons();
+    this.couponVariationIndex = (this.couponVariationIndex || 0) + 1;
+    this.generatedCoupons = this.generateAICoupons(this.couponVariationIndex);
     this.renderCouponView(this.currentCouponStrategy || 'banko');
-    this.showToast('Kupon Güncellendi 🎲', 'Yeni yapay zeka analiz kombinasyonu hazırlandı.');
+    this.showToast('Yeni Varyasyon Hazırlandı 🎲', `Alternatif AI tahminleri harmanlandı (Varyasyon #${this.couponVariationIndex + 1}).`);
   }
 
   copyCouponText() {
@@ -928,18 +1011,19 @@ class AIMatchPulseApp {
 
     let text = `🎯 AI MATCHPULSE - ${coupon.title.toUpperCase()}\n`;
     text += `⚡ Strateji: ${coupon.badge}\n`;
-    text += `📊 Ortalama Güven: %${coupon.avgConfidence} | Toplam: ${coupon.totalMatches} Maç\n`;
+    text += `📊 Ortalama Güven: %${coupon.avgConfidence} | Toplam: ${coupon.totalMatches} Karşılaşma\n`;
+    text += `🎲 Varyasyon: #${(this.couponVariationIndex || 0) + 1}\n`;
     text += `════════════════════════════════════\n\n`;
 
     coupon.matches.forEach((m, idx) => {
       text += `${idx + 1}. ${m.home} vs ${m.away} (⏰ ${m.time})\n`;
       text += `   • Tercih: ${m.selectedTip}\n`;
-      text += `   • Güven: ${m.confidenceBadge} | Skor Konsensüsü: ${m.topScore}\n`;
-      text += `   • AI Analizi: ${m.reason}\n\n`;
+      text += `   • ${m.oddBadge} | ${m.confidenceBadge} | Skor: ${m.topScore}\n`;
+      text += `   • Analiz: ${m.reason}\n\n`;
     });
 
     text += `════════════════════════════════════\n`;
-    text += `🤖 ChatGPT, Claude, Gemini & Grok Konsensüs Analizi\n`;
+    text += `🤖 ChatGPT, Claude, Gemini & Grok Çoklu AI Konsensüsü\n`;
     text += `🔗 https://uzgunbasur.github.io/ai-mac-analiz/`;
 
     navigator.clipboard.writeText(text).then(() => {
@@ -1572,8 +1656,21 @@ class AIMatchPulseApp {
     // Canlı Skorları Çek (Resmi API)
     document.getElementById('btnSyncScores')?.addEventListener('click', () => this.syncLiveScores());
 
-    // 🎯 AI Akıllı Kupon Oluşturucu
+    // 🎯 AI Akıllı Kupon Oluşturucu & Modal Butonları
     document.getElementById('btnGenerateCoupon')?.addEventListener('click', () => this.openCouponModal());
+    document.getElementById('btnRegenerateCoupon')?.addEventListener('click', () => this.regenerateCoupon());
+    document.getElementById('btnCopyCoupon')?.addEventListener('click', () => this.copyCouponText());
+    document.querySelectorAll('.modal-close-btn, #btnCloseCouponModal').forEach(el => {
+      el.addEventListener('click', () => this.closeCouponModal());
+    });
+
+    // Kupon Strateji Sekmeleri (Banko / İdeal / Sürpriz)
+    document.querySelectorAll('.coupon-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const strat = btn.dataset.strategy || (btn.id.includes('Banko') ? 'banko' : (btn.id.includes('Ideal') ? 'ideal' : 'surpriz'));
+        this.switchCouponTab(strat);
+      });
+    });
 
     // Modal Dışına Tıklama ve Escape Tuşu ile Kapatma
     document.getElementById('aiCouponModal')?.addEventListener('click', (e) => {

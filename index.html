@@ -874,15 +874,15 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
 
       <!-- Strateji Sekmeleri -->
       <div class="ai-coupon-tabs">
-        <button type="button" class="coupon-tab-btn active" id="tabCouponBanko" onclick="window.app.switchCouponTab('banko')">
+        <button type="button" class="coupon-tab-btn active" id="tabCouponBanko" data-strategy="banko" onclick="window.app.switchCouponTab('banko')">
           <span>🟢 Banko Kupon</span>
-          <span class="coupon-tab-sub">Yüksek Güven & Tam Konsensüs</span>
+          <span class="coupon-tab-sub">Yüksek Güven & Sağlam Seçimler</span>
         </button>
-        <button type="button" class="coupon-tab-btn" id="tabCouponIdeal" onclick="window.app.switchCouponTab('ideal')">
+        <button type="button" class="coupon-tab-btn" id="tabCouponIdeal" data-strategy="ideal" onclick="window.app.switchCouponTab('ideal')">
           <span>🟡 İdeal / Gol Kuponu</span>
           <span class="coupon-tab-sub">Dengeli Oran & Trend Tercihler</span>
         </button>
-        <button type="button" class="coupon-tab-btn" id="tabCouponSurpriz" onclick="window.app.switchCouponTab('surpriz')">
+        <button type="button" class="coupon-tab-btn" id="tabCouponSurpriz" data-strategy="surpriz" onclick="window.app.switchCouponTab('surpriz')">
           <span>🔥 Sürpriz / Değer Kuponu</span>
           <span class="coupon-tab-sub">Yüksek Getiri & Sürpriz Potansiyeli</span>
         </button>
@@ -900,11 +900,11 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
 
       <!-- Modal Footer -->
       <div class="ai-coupon-modal-footer">
-        <button type="button" class="notion-btn notion-btn-sm" onclick="window.app.regenerateCoupon()" title="Yapay zeka modellerinin farklı tercihlerini içeren yeni bir kombinasyon üret">
+        <button type="button" id="btnRegenerateCoupon" class="notion-btn notion-btn-sm" onclick="window.app.regenerateCoupon()" title="Yapay zeka modellerinin farklı tercihlerini içeren yeni bir kombinasyon üret">
           <span>🎲 Farklı Varyasyon Üret</span>
         </button>
         <div style="display: flex; align-items: center; gap: 8px;">
-          <button type="button" class="notion-btn notion-btn-sm" onclick="window.app.closeCouponModal()">
+          <button type="button" id="btnCloseCouponModal" class="notion-btn notion-btn-sm" onclick="window.app.closeCouponModal()">
             Kapat
           </button>
           <button type="button" id="btnCopyCoupon" class="notion-btn notion-btn-primary notion-btn-sm" onclick="window.app.copyCouponText()" style="background: var(--accent-green); border-color: var(--accent-green); color: #fff; font-weight: 600;">
@@ -919,6 +919,6 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
   <div id="notion-toast" class="notion-toast"></div>
 
   <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
-  <script type="module" src="./js/app.js?v=6.0.0"></script>
+  <script type="module" src="./js/app.js?v=6.1.0"></script>
 </body>
 </html>
