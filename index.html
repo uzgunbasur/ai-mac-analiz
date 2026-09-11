@@ -440,6 +440,157 @@
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(120, 120, 120, 0.5);
     }
+
+    /* ====================================================================
+       AI AKILLI KUPON MODALI STİLLERİ
+       ==================================================================== */
+    .ai-coupon-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .ai-coupon-modal-dialog {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 680px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+      animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .ai-coupon-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-secondary);
+    }
+
+    .modal-close-btn {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .modal-close-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    .ai-coupon-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      padding: 12px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .coupon-tab-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 2px;
+      transition: all 0.2s;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .coupon-tab-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+    .coupon-tab-btn.active {
+      background: var(--accent-green-bg);
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+    .coupon-tab-sub {
+      font-size: 10px;
+      font-weight: 400;
+      opacity: 0.75;
+    }
+
+    .ai-coupon-stats {
+      padding: 10px 20px;
+      background: rgba(16, 185, 129, 0.04);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .ai-coupon-body {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .coupon-match-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.2s;
+    }
+    .coupon-match-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .ai-coupon-modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-secondary);
+      flex-wrap: wrap;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -456,7 +607,7 @@
           <div>
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <h1 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">AI MatchPulse</h1>
-              <span class="notion-tag tag-green">v5.0 Gerçek Veri & SofaScore</span>
+              <span class="notion-tag tag-green">v6.0 AI Kupon & Otomatik Canlı Skor</span>
               <span id="cloudSyncStatus" class="notion-tag tag-subtle" style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px;" title="Firebase Cloud Firestore">
                 <span class="pulse-live-dot" style="background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
                 <span style="color: var(--accent-green); font-weight: 600;">Bulut Eşitleme: Bağlanıyor...</span>
@@ -632,44 +783,15 @@ Analiz: Karşılıklı gollü dengeli bir Londra derbisi." class="notion-textare
             <span>⚡ Canlı Skorları / Sonuçları Çek (Resmi Veri)</span>
           </button>
 
-          <!-- 📥 SOFASCORE / FLASHSCORE HAM SKOR YAPIŞTIRMA BUTONU -->
-          <button id="btnToggleScorePaste" onclick="window.app.toggleScorePastePanel()" class="notion-btn notion-btn-sm" style="border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1); color: #818cf8; font-weight: 600;" title="SofaScore, Flashscore veya Mackolik'ten kopyaladığınız maç skorlarını yapıştırıp tek tıkla eşleştirin">
-            <span>📥 SofaScore / Skor Yapıştır</span>
+          <!-- 🎯 AI AKILLI KUPON OLUŞTUR BUTONU -->
+          <button id="btnGenerateCoupon" onclick="window.app.openCouponModal()" class="notion-btn notion-btn-primary notion-btn-sm" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: #10b981; color: #fff; font-weight: 600; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);" title="Yapay zekaların (ChatGPT, Claude, Gemini, Grok) tahminlerini, güven oranlarını ve ortaklaştığı maçları tarayarak günün akıllı kuponunu üretir">
+            <span>🎯 AI Akıllı Kupon Oluştur</span>
           </button>
 
           <input type="text" id="tableSearch" placeholder="Maç veya takım ara..." class="notion-input" style="width: 140px; font-size: 12px; padding: 5px 8px;">
           
           <button id="btnCopyHtml" class="notion-btn notion-btn-sm" title="Tabloyu HTML olarak panoya kopyala">
             <span>📋 Tablo HTML</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- SOFASCORE / FLASHSCORE HAM SKOR YAPIŞTIRMA ÇEKMECESİ (DRAWER) -->
-      <div id="panelScorePaste" class="score-paste-drawer" style="display: none; padding: 16px 20px; background: rgba(99, 102, 241, 0.05); border-bottom: 1px solid var(--border-color);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 16px;">📥</span>
-            <span style="font-weight: 600; font-size: 13px; color: var(--text-primary);">SofaScore / Flashscore / Mackolik Ham Skor Yapıştırma</span>
-            <span class="notion-tag tag-subtle" style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; font-size: 10px;">Alternatif 2</span>
-          </div>
-          <button type="button" class="notion-btn notion-btn-sm" onclick="window.app.toggleScorePastePanel(false)" style="padding: 2px 8px; font-size: 11px;">✕ Kapat</button>
-        </div>
-        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4;">
-          SofaScore, Flashscore veya Mackolik'ten kopyaladığınız maç ve skor satırlarını doğrudan buraya yapıştırın. Sistem takım isimlerini akıllıca eşleştirerek canlı ve bitmiş (MS) skorları tablonuza anında yansıtır ve buluta kaydeder.
-        </p>
-        <textarea id="scoreRawInput" class="notion-textarea" style="height: 110px; font-family: var(--font-mono); font-size: 12px; margin-bottom: 10px;" placeholder="Örnek Formatlar:
-Chelsea 6 - 3 Leeds United (FT)
-Napoli 0 - 1 Arsenal MS
-Liverpool 2 - 1 Atlético Madrid (Bitti)
-Barcelona vs Feyenoord: 5 - 1
-veya SofaScore/Flashscore kopyalanan liste..."></textarea>
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-          <span style="font-size: 11px; color: var(--text-muted);">
-            💡 İpucu: Satır sonlarındaki dakika (68', İY) veya bitiş (MS, FT) etiketleri otomatik olarak tanınır.
-          </span>
-          <button id="btnProcessScoreRaw" onclick="window.app.processRawScoresText()" class="notion-btn notion-btn-primary notion-btn-sm" style="background: #6366f1; border-color: #6366f1;">
-            <span>⚡ Skorları Tabloyla Eşleştir & Güncelle</span>
           </button>
         </div>
       </div>
@@ -728,10 +850,75 @@ veya SofaScore/Flashscore kopyalanan liste..."></textarea>
 
   </div>
 
+  <!-- 🎯 AI AKILLI KUPON MODALI -->
+  <div id="aiCouponModal" class="ai-coupon-modal-backdrop" style="display: none;">
+    <div class="ai-coupon-modal-dialog">
+      <!-- Modal Header -->
+      <div class="ai-coupon-modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); display: flex; align-items: center; justify-content: center; font-size: 18px;">
+            🎯
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <h3 style="font-size: 15.5px; font-weight: 700; color: var(--text-primary); margin: 0;">Günün Otomatik AI Kuponu</h3>
+              <span id="couponStrategyBadge" class="notion-tag tag-green" style="font-size: 10.5px;">🟢 Banko Kupon</span>
+            </div>
+            <p style="font-size: 11.5px; color: var(--text-muted); margin: 2px 0 0 0;">
+              ChatGPT, Claude, Gemini & Grok modellerinin konsensüs ve güven oranları taranarak hazırlandı.
+            </p>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="window.app.closeCouponModal()" title="Kapat">✕</button>
+      </div>
+
+      <!-- Strateji Sekmeleri -->
+      <div class="ai-coupon-tabs">
+        <button type="button" class="coupon-tab-btn active" id="tabCouponBanko" onclick="window.app.switchCouponTab('banko')">
+          <span>🟢 Banko Kupon</span>
+          <span class="coupon-tab-sub">Yüksek Güven & Tam Konsensüs</span>
+        </button>
+        <button type="button" class="coupon-tab-btn" id="tabCouponIdeal" onclick="window.app.switchCouponTab('ideal')">
+          <span>🟡 İdeal / Gol Kuponu</span>
+          <span class="coupon-tab-sub">Dengeli Oran & Trend Tercihler</span>
+        </button>
+        <button type="button" class="coupon-tab-btn" id="tabCouponSurpriz" onclick="window.app.switchCouponTab('surpriz')">
+          <span>🔥 Sürpriz / Değer Kuponu</span>
+          <span class="coupon-tab-sub">Yüksek Getiri & Sürpriz Potansiyeli</span>
+        </button>
+      </div>
+
+      <!-- Kupon İstatistik Özeti -->
+      <div id="couponStatsBar" class="ai-coupon-stats">
+        <!-- JS tarafından doldurulacak -->
+      </div>
+
+      <!-- Kupondaki Maç Kartları -->
+      <div id="couponMatchesContainer" class="ai-coupon-body">
+        <!-- JS tarafından doldurulacak -->
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="ai-coupon-modal-footer">
+        <button type="button" class="notion-btn notion-btn-sm" onclick="window.app.regenerateCoupon()" title="Yapay zeka modellerinin farklı tercihlerini içeren yeni bir kombinasyon üret">
+          <span>🎲 Farklı Varyasyon Üret</span>
+        </button>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button type="button" class="notion-btn notion-btn-sm" onclick="window.app.closeCouponModal()">
+            Kapat
+          </button>
+          <button type="button" id="btnCopyCoupon" class="notion-btn notion-btn-primary notion-btn-sm" onclick="window.app.copyCouponText()" style="background: var(--accent-green); border-color: var(--accent-green); color: #fff; font-weight: 600;">
+            <span>📋 Kuponu Kopyala (WhatsApp / Notlar)</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- YÜZEN BİLDİRİM (TOAST) -->
   <div id="notion-toast" class="notion-toast"></div>
 
   <!-- GÖRECELİ JS MOTORU VE GÖMÜLÜ MOTOR -->
-  <script type="module" src="./js/app.js?v=5.0.0"></script>
+  <script type="module" src="./js/app.js?v=6.0.0"></script>
 </body>
 </html>

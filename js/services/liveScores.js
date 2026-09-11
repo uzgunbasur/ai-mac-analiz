@@ -143,36 +143,39 @@ export class LiveScoreService {
   }
 
   /**
-   * Belirtilen tarihler için tüm liglerden resmi maç skorlarını çek
+   * Belirtilen tarih aralığı için tüm liglerden resmi maç skorlarını çek (Date-Range & Timeout Korumalı)
    */
-  async fetchScoreboardsForDates(datesArray = []) {
-    const dates = datesArray.filter(Boolean);
-    if (dates.length === 0) {
-      dates.push(this.formatDateParam(new Date()));
-    }
+  async fetchScoreboardsForDateRange(startDateStr, endDateStr) {
+    const rangeParam = (startDateStr && endDateStr) 
+      ? (startDateStr === endDateStr ? startDateStr : `${startDateStr}-${endDateStr}`) 
+      : (startDateStr || this.formatDateParam(new Date()));
 
-    const fetchTasks = [];
-    dates.forEach(dStr => {
-      SUPPORTED_LEAGUES.forEach(league => {
-        const url = `${this.apiBase}/${league.code}/scoreboard?dates=${dStr}`;
-        fetchTasks.push(
-          fetch(url)
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-              if (!data || !data.events) return [];
-              return data.events.map(ev => ({
-                id: ev.id,
-                league: league.name,
-                leagueCode: league.code,
-                name: ev.name,
-                date: ev.date,
-                status: ev.status,
-                competitors: ev.competitions?.[0]?.competitors || []
-              }));
-            })
-            .catch(() => [])
-        );
-      });
+    const fetchTasks = SUPPORTED_LEAGUES.map(league => {
+      const url = `${this.apiBase}/${league.code}/scoreboard?dates=${rangeParam}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s zaman aşımı koruması
+
+      return fetch(url, { signal: controller.signal })
+        .then(res => {
+          clearTimeout(timeoutId);
+          return res.ok ? res.json() : null;
+        })
+        .then(data => {
+          if (!data || !data.events) return [];
+          return data.events.map(ev => ({
+            id: ev.id,
+            league: league.name,
+            leagueCode: league.code,
+            name: ev.name,
+            date: ev.date,
+            status: ev.status,
+            competitors: ev.competitions?.[0]?.competitors || []
+          }));
+        })
+        .catch(() => {
+          clearTimeout(timeoutId);
+          return [];
+        });
     });
 
     const results = await Promise.allSettled(fetchTasks);
@@ -187,6 +190,16 @@ export class LiveScoreService {
   }
 
   /**
+   * Belirtilen tarihler için tüm liglerden resmi maç skorlarını çek (Geriye uyumluluk için)
+   */
+  async fetchScoreboardsForDates(datesArray = []) {
+    const dates = datesArray.filter(Boolean);
+    if (dates.length === 0) return this.fetchScoreboardsForDateRange();
+    const sorted = [...dates].sort();
+    return this.fetchScoreboardsForDateRange(sorted[0], sorted[sorted.length - 1]);
+  }
+
+  /**
    * Listedeki kullanıcı maçını ESPN gerçek maçları arasında ara
    */
   findRealMatch(userHome, userAway, realEventsList) {
@@ -195,11 +208,24 @@ export class LiveScoreService {
       const awayComp = ev.competitors.find(c => c.homeAway === 'away');
       if (!homeComp || !awayComp) continue;
 
-      const realHomeName = homeComp.team?.displayName || homeComp.team?.name || '';
-      const realAwayName = awayComp.team?.displayName || awayComp.team?.name || '';
+      const realHomeNames = [
+        homeComp.team?.displayName,
+        homeComp.team?.name,
+        homeComp.team?.shortDisplayName,
+        homeComp.team?.abbreviation
+      ].filter(Boolean);
+
+      const realAwayNames = [
+        awayComp.team?.displayName,
+        awayComp.team?.name,
+        awayComp.team?.shortDisplayName,
+        awayComp.team?.abbreviation
+      ].filter(Boolean);
 
       // 1. Düz eşleşme (Ev Sahibi vs Deplasman)
-      if (this.areTeamsMatching(userHome, realHomeName) && this.areTeamsMatching(userAway, realAwayName)) {
+      const homeMatchNormal = realHomeNames.some(rName => this.areTeamsMatching(userHome, rName));
+      const awayMatchNormal = realAwayNames.some(rName => this.areTeamsMatching(userAway, rName));
+      if (homeMatchNormal && awayMatchNormal) {
         return {
           event: ev,
           homeComp,
@@ -209,7 +235,9 @@ export class LiveScoreService {
       }
 
       // 2. Ters eşleşme (Kullanıcı Deplasman vs Ev Sahibi yazmışsa)
-      if (this.areTeamsMatching(userHome, realAwayName) && this.areTeamsMatching(userAway, realHomeName)) {
+      const homeMatchReversed = realAwayNames.some(rName => this.areTeamsMatching(userHome, rName));
+      const awayMatchReversed = realHomeNames.some(rName => this.areTeamsMatching(userAway, rName));
+      if (homeMatchReversed && awayMatchReversed) {
         return {
           event: ev,
           homeComp,
@@ -227,25 +255,33 @@ export class LiveScoreService {
    * Kesinlikle sahte skor simülasyonu yapmaz.
    */
   async syncMatchesWithRealScores(matchesData, selectedDateString) {
-    const targetDate = this.formatDateParam(selectedDateString) || this.formatDateParam(new Date());
     const dObj = selectedDateString ? new Date(selectedDateString) : new Date();
-    const prev1 = new Date(dObj); prev1.setDate(prev1.getDate() - 1);
-    const prev2 = new Date(dObj); prev2.setDate(prev2.getDate() - 2);
-    const next1 = new Date(dObj); next1.setDate(next1.getDate() + 1);
-    const today = this.formatDateParam(new Date());
-    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const baseDate = !isNaN(dObj.getTime()) ? dObj : new Date();
 
-    const datesToQuery = Array.from(new Set([
-      targetDate,
-      this.formatDateParam(prev1),
-      this.formatDateParam(prev2),
-      this.formatDateParam(next1),
-      today,
-      this.formatDateParam(yesterdayDate)
-    ])).filter(Boolean);
+    // 3 günlük pencere: [Seçili Tarih - 1 gün] ile [Seçili Tarih + 1 gün]
+    const startD = new Date(baseDate);
+    startD.setDate(startD.getDate() - 1);
+    const endD = new Date(baseDate);
+    endD.setDate(endD.getDate() + 1);
 
-    // ESPN'den resmi maçları çek
-    const realEvents = await this.fetchScoreboardsForDates(datesToQuery);
+    const now = new Date();
+    const minDate = new Date(Math.min(startD.getTime(), now.getTime()));
+    const maxDate = new Date(Math.max(endD.getTime(), now.getTime()));
+    const diffDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
+
+    let realEvents = [];
+    if (diffDays <= 7) {
+      realEvents = await this.fetchScoreboardsForDateRange(
+        this.formatDateParam(minDate),
+        this.formatDateParam(maxDate)
+      );
+    } else {
+      const [evsTarget, evsToday] = await Promise.all([
+        this.fetchScoreboardsForDateRange(this.formatDateParam(startD), this.formatDateParam(endD)),
+        this.fetchScoreboardsForDateRange(this.formatDateParam(now), this.formatDateParam(now))
+      ]);
+      realEvents = [...evsTarget, ...evsToday];
+    }
 
     let finishedCount = 0;
     let liveCount = 0;
@@ -306,7 +342,7 @@ export class LiveScoreService {
           match.status = 'upcoming';
           match.currentScore = null;
           match.minute = null;
-          match.displayStatus = `⏰ ${kickoffTime}`;
+          match.displayStatus = `⏰ ${kickoffTime} | Başlamadı`;
           upcomingCount++;
         }
       } else {
@@ -317,7 +353,7 @@ export class LiveScoreService {
           match.status = 'upcoming';
           match.currentScore = null;
           match.minute = null;
-          match.displayStatus = match.time ? `⏰ ${match.time}` : '⏰ Başlamadı';
+          match.displayStatus = match.time ? `⏰ ${match.time} | Başlamadı` : '⏰ Başlamadı';
         }
       }
 
