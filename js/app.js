@@ -721,63 +721,97 @@ class AIMatchPulseApp {
       const underVotes = goals.filter(g => g === 'under').length;
       const kgYesVotes = kgList.filter(k => k === 'yes').length;
 
-      // 1. BANKO TERCİHLERİ (En sağlam, düşük riskli tercihler | Hedef Kombine: ~3.00 - 3.40 Oran)
+      // 1. BANKO TERCİHLERİ (Düşük riskli, kesin ve güvenilir standart tercihler: MS 1, MS 2, 1X, X2, 1.5 Üst)
       let bankoTip = '';
-      const bankoOddsPool = [1.42, 1.45, 1.48, 1.50, 1.38, 1.44, 1.46, 1.52];
+      const bankoOddsPool = [1.38, 1.42, 1.45, 1.35, 1.40, 1.44, 1.46, 1.39];
       const bankoOddNum = bankoOddsPool[(analyzedMatches.length + variationSeed) % bankoOddsPool.length];
 
       if (topOutcome === '1') {
-        bankoTip = (variationSeed % 2 === 1 && overVotes >= 2) ? '1.5 Üst & 1X Çifte Şans' : 'MS 1 (Ev Sahibi Galibiyeti)';
+        bankoTip = (variationSeed % 2 === 1) ? '1X Çifte Şans' : 'MS 1 (Ev Sahibi Galibiyeti)';
       } else if (topOutcome === '2') {
         bankoTip = (variationSeed % 2 === 1) ? 'X2 Çifte Şans' : 'MS 2 (Deplasman Galibiyeti)';
       } else {
-        bankoTip = '1X Çifte Şans (Dengeli)';
+        bankoTip = (variationSeed % 2 === 0) ? '1X Çifte Şans' : '1.5 Üst Gol';
       }
 
-      // 2. İDEAL / GOL TERCİHLERİ (Dengeli oran & gol kombinasyonları | Hedef Kombine: ~6.50 - 8.00 Oran)
+      // 2. İDEAL TERCİHLER (Analizlerde öne çıkan standart ana tercihler: 2.5 Üst, KG Var, 2.5 Alt, MS 1, MS 2)
       let idealTip = '';
-      const idealOddsPool = [1.85, 1.90, 1.98, 2.05, 1.82, 1.88, 1.92, 2.10];
+      const idealOddsPool = [1.74, 1.78, 1.82, 1.85, 1.70, 1.76, 1.80, 1.84];
       const idealOddNum = idealOddsPool[(analyzedMatches.length + variationSeed) % idealOddsPool.length];
 
-      if (variationSeed % 3 === 0) {
-        if (overVotes >= preds.length / 2) {
+      const idealCycle = (analyzedMatches.length + variationSeed) % 3;
+      if (idealCycle === 0) {
+        if (overVotes >= underVotes && overVotes >= 1) {
           idealTip = '2.5 Üst Gol';
-        } else if (kgYesVotes >= 2) {
+        } else if (kgYesVotes >= 1) {
           idealTip = 'KG Var (Karşılıklı Gol)';
         } else {
-          idealTip = topOutcome === '1' ? 'MS 1 & 1.5 Üst Gol' : '2-3 Toplam Gol';
+          idealTip = topOutcome === '1' ? 'MS 1 (Ev Sahibi Galibiyeti)' : (topOutcome === '2' ? 'MS 2 (Deplasman Galibiyeti)' : '2.5 Alt Gol');
         }
-      } else if (variationSeed % 3 === 1) {
+      } else if (idealCycle === 1) {
         if (kgYesVotes >= 1) {
           idealTip = 'KG Var (Karşılıklı Gol)';
+        } else if (topOutcome === '1') {
+          idealTip = 'MS 1 (Ev Sahibi Galibiyeti)';
+        } else if (topOutcome === '2') {
+          idealTip = 'MS 2 (Deplasman Galibiyeti)';
         } else {
-          idealTip = topOutcome === '1' ? 'MS 1 (Ev Sahibi)' : '2.5 Üst Gol';
+          idealTip = '2.5 Üst Gol';
         }
       } else {
-        idealTip = (overVotes >= 2) ? '2.5 Üst Gol' : '2-3 Toplam Gol';
+        if (underVotes >= 2) {
+          idealTip = '2.5 Alt Gol';
+        } else if (overVotes >= 2) {
+          idealTip = '2.5 Üst Gol';
+        } else if (topOutcome === '1') {
+          idealTip = 'MS 1 (Ev Sahibi Galibiyeti)';
+        } else {
+          idealTip = 'KG Var (Karşılıklı Gol)';
+        }
       }
 
-      // 3. SÜRPRİZ / DEĞER TERCİHLERİ (Yüksek getiri, beraberlik, sürpriz deplasman | Hedef Kombine: 10+ Oran Garantili!)
+      // 3. SÜRPRİZ / DEĞER TERCİHLERİ (Ayakları yere basan gerçekçi standart tercihler: MS X, Sürpriz MS 2/1, 2.5 Alt, KG Yok)
+      // ASLA hayali İY/MS, Handikap veya uçuk fantezi skorlar YOKTUR!
       let surprizTip = '';
       let surprizScore = 75;
-      let surprizOddNum = 3.50;
 
-      if (topOutcome === 'X') {
-        surprizTip = (variationSeed % 2 === 0) ? 'MS X (Beraberlik Sürprizi)' : 'İY 0 / MS X (Kilit Maç)';
-        surprizOddNum = (variationSeed % 2 === 0) ? 3.45 : 4.40;
+      // Seçme kuponda 2 maç birleştiğinde ~10+ bomba oran yakalamak için tekil sürpriz oranları (~3.15 - 3.35)
+      const surprizSecmeOddsPool = [3.20, 3.25, 3.30, 3.15, 3.35, 3.22];
+      let surprizSecmeOddNum = surprizSecmeOddsPool[(analyzedMatches.length + variationSeed) % surprizSecmeOddsPool.length];
+
+      // Tam liste kombinede ise gerçekçi ve ayakları yere basan sürpriz çarpanı (2.10 - 2.35)
+      const surprizKombineOddsPool = [2.15, 2.25, 2.30, 2.10, 2.20, 2.35, 2.18, 2.22];
+      let surprizKombineOddNum = surprizKombineOddsPool[(analyzedMatches.length + variationSeed) % surprizKombineOddsPool.length];
+
+      const surprizVariant = (analyzedMatches.length + variationSeed) % 3;
+
+      if (topOutcome === 'X' || outcomes.includes('X')) {
+        surprizTip = 'MS X (Beraberlik Sürprizi)';
         surprizScore = 95;
+      } else if (topOutcome === '1') {
+        if (surprizVariant === 0) {
+          surprizTip = 'MS X (Beraberlik Sürprizi)';
+          surprizScore = 88;
+        } else if (surprizVariant === 1 && underVotes >= 1) {
+          surprizTip = '2.5 Alt Gol (Kilitlenme Sürprizi)';
+          surprizSecmeOddNum = 2.45;
+          surprizScore = 80;
+        } else {
+          surprizTip = 'MS 2 (Deplasman Sürprizi)';
+          surprizScore = 84;
+        }
       } else if (topOutcome === '2') {
-        surprizTip = (variationSeed % 2 === 0) ? 'MS 2 & 2.5 Üst (Deplasman Zaferi)' : 'MS 2 & KG Var';
-        surprizOddNum = (variationSeed % 2 === 0) ? 3.80 : 4.20;
-        surprizScore = 90;
-      } else if (kgYesVotes >= 2 && overVotes >= 2) {
-        surprizTip = (variationSeed % 2 === 0) ? 'KG Var & 3.5 Üst Gol' : '3.5 Üst Gol & Karşılıklı Skor';
-        surprizOddNum = (variationSeed % 2 === 0) ? 3.50 : 3.75;
-        surprizScore = 85;
+        if (surprizVariant === 0) {
+          surprizTip = 'MS X (Beraberlik Sürprizi)';
+          surprizScore = 90;
+        } else {
+          surprizTip = 'MS 1 (Ev Sahibi Sürprizi)';
+          surprizScore = 85;
+        }
       } else {
-        surprizTip = (variationSeed % 2 === 0) ? 'İlk Yarı X / Maç Sonu 1' : 'Handikap 0 (Tek Farklı Galibiyet)';
-        surprizOddNum = (variationSeed % 2 === 0) ? 4.10 : 3.65;
-        surprizScore = 80;
+        surprizTip = 'KG Yok (Karşılıklı Gol Yok)';
+        surprizScore = 75;
+        surprizSecmeOddNum = 2.35;
       }
 
       analyzedMatches.push({
@@ -803,7 +837,8 @@ class AIMatchPulseApp {
         idealTip,
         idealOddNum,
         surprizTip,
-        surprizOddNum
+        surprizSecmeOddNum,
+        surprizKombineOddNum
       });
     });
 
@@ -849,10 +884,10 @@ class AIMatchPulseApp {
     const surprizSecmeMatches = sortedSurpriz.slice(0, surprizSecmeCount).map(m => ({
       ...m,
       selectedTip: m.surprizTip,
-      oddNum: m.surprizOddNum,
+      oddNum: m.surprizSecmeOddNum,
       tipType: 'surpriz',
       confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
-      oddBadge: `🔥 Oran: ${m.surprizOddNum.toFixed(2)}`,
+      oddBadge: `🔥 Oran: ${m.surprizSecmeOddNum.toFixed(2)}`,
       reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
     }));
     const surprizSecmeTotal = Number(surprizSecmeMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
@@ -885,14 +920,14 @@ class AIMatchPulseApp {
     }));
     const idealKombineTotal = Number(idealKombineMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
 
-    // 6. SÜRPRİZ KOMBİNE: Tablodaki TÜM maçların sürpriz/yüksek oranlı seçimleriyle MEGA BOMBA
+    // 6. SÜRPRİZ KOMBİNE: Tablodaki TÜM maçların sürpriz/yüksek oranlı seçimleriyle tam liste kombine
     const surprizKombineMatches = sortedSurpriz.map(m => ({
       ...m,
       selectedTip: m.surprizTip,
-      oddNum: m.surprizOddNum,
+      oddNum: m.surprizKombineOddNum,
       tipType: 'surpriz',
       confidenceBadge: `%${Math.max(60, m.avgConfidence - 8)} Değer Güveni`,
-      oddBadge: `🔥 Oran: ${m.surprizOddNum.toFixed(2)}`,
+      oddBadge: `🔥 Oran: ${m.surprizKombineOddNum.toFixed(2)}`,
       reason: (m.topOutcome === 'X' ? 'Beraberlik ve kilitlenme olasılığı yüksek değer maçı.' : m.bestAnalysis)
     }));
     const surprizKombineTotal = Number(surprizKombineMatches.reduce((acc, m) => acc * m.oddNum, 1).toFixed(2));
@@ -980,12 +1015,12 @@ class AIMatchPulseApp {
         group: 2,
         groupTitle: '🚀 2. Grup: Tüm Maçları Kullanan Kombineler',
         title: '💥 Günün Tam Liste Mega Sürpriz Kombinesi',
-        badge: `💥 Tablodaki Tüm ${surprizKombineMatches.length} Maçın Mega Bomba Kombinesi`,
+        badge: `💥 Tablodaki Tüm ${surprizKombineMatches.length} Maçın Yüksek Sürpriz Kombinesi`,
         strategy: 'surpriz_kombine',
-        strategyTag: '💥 SÜRPRİZ KOMBİNE (MEGA DEV ORAN)',
+        strategyTag: '💥 SÜRPRİZ KOMBİNE (TAM LİSTE)',
         totalOdds: surprizKombineTotal,
         totalOddsFormatted: surprizKombineTotal.toFixed(2),
-        oddsTargetText: `Mega Dev Oran (~${surprizKombineTotal.toFixed(2)})`,
+        oddsTargetText: `Tam Liste Sürpriz Çarpan (~${surprizKombineTotal.toFixed(2)})`,
         matches: surprizKombineMatches,
         totalMatches: surprizKombineMatches.length,
         isFullList: true,
